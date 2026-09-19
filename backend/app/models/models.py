@@ -1,0 +1,326 @@
+from datetime import datetime
+from ..extensions import db
+
+
+class TimestampMixin:
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class User(TimestampMixin, db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    phone = db.Column(db.String(20))
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(20), default='customer', nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    avatar = db.Column(db.String(500))
+
+    orders = db.relationship('Order', backref='user', lazy='dynamic')
+    cart_items = db.relationship('CartItem', backref='user', lazy='dynamic')
+    wishlist_items = db.relationship('WishlistItem', backref='user', lazy='dynamic')
+    reviews = db.relationship('Review', backref='user', lazy='dynamic')
+    notifications = db.relationship('Notification', backref='user', lazy='dynamic')
+    addresses = db.relationship('Address', backref='user', lazy='dynamic')
+
+    def to_dict(self):
+        return {'id': self.id, 'name': self.name, 'email': self.email,
+                'phone': self.phone, 'role': self.role, 'avatar': self.avatar}
+
+
+class Product(TimestampMixin, db.Model):
+    __tablename__ = 'products'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    slug = db.Column(db.String(200), unique=True, nullable=False, index=True)
+    type = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.Text)
+    material = db.Column(db.String(200))
+    fit = db.Column(db.String(100))
+    base_price = db.Column(db.Numeric(10, 2), nullable=False)
+    images = db.Column(db.JSON, default=list)
+    colours = db.Column(db.JSON, default=list)
+    sizes = db.Column(db.JSON, default=list)
+    rating = db.Column(db.Float, default=0.0)
+    review_count = db.Column(db.Integer, default=0)
+    is_featured = db.Column(db.Boolean, default=False)
+    is_new = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
+    tags = db.Column(db.JSON, default=list)
+
+    inventory = db.relationship('Inventory', backref='product', lazy='dynamic')
+    reviews = db.relationship('Review', backref='product', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'name': self.name, 'slug': self.slug, 'type': self.type,
+            'description': self.description, 'material': self.material, 'fit': self.fit,
+            'base_price': float(self.base_price), 'images': self.images or [],
+            'colours': self.colours or [], 'sizes': self.sizes or [],
+            'rating': self.rating, 'review_count': self.review_count,
+            'is_featured': self.is_featured, 'is_new': self.is_new, 'tags': self.tags or [],
+        }
+
+
+class Inventory(db.Model):
+    __tablename__ = 'inventory'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    colour = db.Column(db.String(50), nullable=False)
+    size = db.Column(db.String(10), nullable=False)
+    stock = db.Column(db.Integer, default=0, nullable=False)
+    __table_args__ = (db.UniqueConstraint('product_id', 'colour', 'size'),)
+
+    def to_dict(self):
+        return {'id': self.id, 'product_id': self.product_id,
+                'colour': self.colour, 'size': self.size, 'stock': self.stock}
+
+
+class Design(TimestampMixin, db.Model):
+    __tablename__ = 'designs'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(100), nullable=False)
+    image_url = db.Column(db.String(500), nullable=False)
+    is_trending = db.Column(db.Boolean, default=False)
+    is_featured = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+
+    def to_dict(self):
+        return {'id': self.id, 'name': self.name, 'category': self.category,
+                'image_url': self.image_url, 'is_trending': self.is_trending,
+                'is_featured': self.is_featured, 'is_active': self.is_active}
+
+
+class CartItem(TimestampMixin, db.Model):
+    __tablename__ = 'cart_items'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    colour = db.Column(db.String(50), nullable=False)
+    colour_hex = db.Column(db.String(10))
+    sizes = db.Column(db.JSON, nullable=False)
+    front_design = db.Column(db.Text)
+    back_design = db.Column(db.Text)
+    front_dimensions = db.Column(db.JSON)
+    back_dimensions = db.Column(db.JSON)
+    base_price = db.Column(db.Numeric(10, 2), nullable=False)
+    front_print_cost = db.Column(db.Numeric(10, 2), default=0)
+    back_print_cost = db.Column(db.Numeric(10, 2), default=0)
+    delivery_cost = db.Column(db.Numeric(10, 2), default=0)
+    total = db.Column(db.Numeric(10, 2), nullable=False)
+
+    product = db.relationship('Product')
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'product': self.product.to_dict() if self.product else None,
+            'colour': self.colour, 'colour_hex': self.colour_hex, 'sizes': self.sizes,
+            'front_design': self.front_design, 'back_design': self.back_design,
+            'front_dimensions': self.front_dimensions, 'back_dimensions': self.back_dimensions,
+            'base_price': float(self.base_price), 'front_print_cost': float(self.front_print_cost),
+            'back_print_cost': float(self.back_print_cost), 'delivery_cost': float(self.delivery_cost),
+            'total': float(self.total),
+        }
+
+
+class Address(TimestampMixin, db.Model):
+    __tablename__ = 'addresses'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    full_name = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(120))
+    line1 = db.Column(db.String(300), nullable=False)
+    line2 = db.Column(db.String(300))
+    area = db.Column(db.String(100), nullable=False)
+    city = db.Column(db.String(100), nullable=False)
+    state = db.Column(db.String(100), nullable=False)
+    pincode = db.Column(db.String(10), nullable=False)
+    gst = db.Column(db.String(20))
+    company = db.Column(db.String(200))
+    instructions = db.Column(db.Text)
+    is_default = db.Column(db.Boolean, default=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'full_name': self.full_name, 'phone': self.phone,
+            'email': self.email, 'line1': self.line1, 'line2': self.line2,
+            'area': self.area, 'city': self.city, 'state': self.state,
+            'pincode': self.pincode, 'gst': self.gst, 'company': self.company,
+            'instructions': self.instructions, 'is_default': self.is_default,
+        }
+
+
+class Order(TimestampMixin, db.Model):
+    __tablename__ = 'orders'
+    id = db.Column(db.Integer, primary_key=True)
+    order_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(db.String(50), default='placed', nullable=False)
+    subtotal = db.Column(db.Numeric(10, 2), nullable=False)
+    delivery = db.Column(db.Numeric(10, 2), default=0)
+    discount = db.Column(db.Numeric(10, 2), default=0)
+    total = db.Column(db.Numeric(10, 2), nullable=False)
+    payment_status = db.Column(db.String(30), default='pending')
+    payment_method = db.Column(db.String(30))
+    payment_id = db.Column(db.String(100))
+    coupon_code = db.Column(db.String(50))
+    address_snapshot = db.Column(db.JSON)
+    tracking_id = db.Column(db.String(100))
+    courier = db.Column(db.String(100))
+    estimated_delivery = db.Column(db.String(30))
+    special_instructions = db.Column(db.Text)
+    admin_notes = db.Column(db.Text)
+
+    items = db.relationship('OrderItem', backref='order', lazy='joined', cascade='all, delete-orphan')
+    status_history = db.relationship('OrderStatusHistory', backref='order', lazy='joined',
+                                      order_by='OrderStatusHistory.created_at', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'order_number': self.order_number, 'status': self.status,
+            'subtotal': float(self.subtotal), 'delivery': float(self.delivery),
+            'discount': float(self.discount), 'total': float(self.total),
+            'payment_status': self.payment_status, 'payment_method': self.payment_method,
+            'address': self.address_snapshot, 'tracking_id': self.tracking_id,
+            'courier': self.courier, 'estimated_delivery': self.estimated_delivery,
+            'created_at': self.created_at.isoformat(),
+            'items': [i.to_dict() for i in self.items],
+            'status_history': [h.to_dict() for h in self.status_history],
+        }
+
+
+class OrderItem(db.Model):
+    __tablename__ = 'order_items'
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
+    product_snapshot = db.Column(db.JSON)
+    colour = db.Column(db.String(50))
+    colour_hex = db.Column(db.String(10))
+    sizes = db.Column(db.JSON)
+    front_design = db.Column(db.Text)
+    back_design = db.Column(db.Text)
+    front_dimensions = db.Column(db.JSON)
+    back_dimensions = db.Column(db.JSON)
+    base_price = db.Column(db.Numeric(10, 2))
+    front_print_cost = db.Column(db.Numeric(10, 2), default=0)
+    back_print_cost = db.Column(db.Numeric(10, 2), default=0)
+    total = db.Column(db.Numeric(10, 2))
+
+    product = db.relationship('Product')
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'product': self.product_snapshot or (self.product.to_dict() if self.product else None),
+            'colour': self.colour, 'colour_hex': self.colour_hex, 'sizes': self.sizes,
+            'front_design': self.front_design, 'back_design': self.back_design,
+            'front_dimensions': self.front_dimensions, 'back_dimensions': self.back_dimensions,
+            'base_price': float(self.base_price or 0), 'front_print_cost': float(self.front_print_cost or 0),
+            'back_print_cost': float(self.back_print_cost or 0), 'total': float(self.total or 0),
+        }
+
+
+class OrderStatusHistory(db.Model):
+    __tablename__ = 'order_status_history'
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
+    status = db.Column(db.String(50), nullable=False)
+    note = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {'status': self.status, 'note': self.note, 'timestamp': self.created_at.isoformat()}
+
+
+class Coupon(TimestampMixin, db.Model):
+    __tablename__ = 'coupons'
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    type = db.Column(db.String(20), nullable=False)  # percentage | flat
+    value = db.Column(db.Numeric(10, 2), nullable=False)
+    min_order = db.Column(db.Numeric(10, 2), default=0)
+    max_uses = db.Column(db.Integer)
+    used_count = db.Column(db.Integer, default=0)
+    expiry = db.Column(db.DateTime)
+    is_active = db.Column(db.Boolean, default=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
+
+    def to_dict(self):
+        return {'code': self.code, 'type': self.type, 'value': float(self.value),
+                'min_order': float(self.min_order), 'expiry': self.expiry.isoformat() if self.expiry else None}
+
+
+class Review(TimestampMixin, db.Model):
+    __tablename__ = 'reviews'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'))
+    rating = db.Column(db.Integer, nullable=False)
+    text = db.Column(db.Text)
+    image = db.Column(db.String(500))
+    is_verified = db.Column(db.Boolean, default=False)
+    is_approved = db.Column(db.Boolean, default=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'rating': self.rating, 'text': self.text, 'image': self.image,
+            'is_verified': self.is_verified, 'created_at': self.created_at.isoformat(),
+            'user': self.user.to_dict() if self.user else None,
+        }
+
+
+class WishlistItem(db.Model):
+    __tablename__ = 'wishlist_items'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    product = db.relationship('Product')
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50))
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {'id': self.id, 'title': self.title, 'message': self.message,
+                'type': self.type, 'is_read': self.is_read, 'created_at': self.created_at.isoformat()}
+
+
+class Enquiry(TimestampMixin, db.Model):
+    __tablename__ = 'enquiries'
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    company = db.Column(db.String(200))
+    enquiry_type = db.Column(db.String(50))
+    quantity = db.Column(db.Integer)
+    message = db.Column(db.Text, nullable=False)
+    is_resolved = db.Column(db.Boolean, default=False)
+
+    def to_dict(self):
+        return {'id': self.id, 'full_name': self.full_name, 'phone': self.phone,
+                'email': self.email, 'company': self.company, 'enquiry_type': self.enquiry_type,
+                'quantity': self.quantity, 'message': self.message, 'created_at': self.created_at.isoformat()}
+
+
+class Setting(db.Model):
+    __tablename__ = 'settings'
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.Text)
+    type = db.Column(db.String(20), default='string')
