@@ -1,28 +1,48 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import type { CanvasDesign } from '../../types'
-
-const PRINT_AREA = { x: 80, y: 100, width: 240, height: 280 }
-const CM_TO_PX = 37.8
+import {
+  type StudioView,
+  PRINT_AREA_PX,
+  PRINT_AREA_CM,
+  pxPerCm,
+  clampDesignToArea,
+} from '../../config/printArea'
 
 interface Props {
   designs: CanvasDesign[]
   selectedId: string | null
   tshirtColour: string
-  view: 'front' | 'back'
+  view: StudioView
   onSelect: (id: string | null) => void
   onUpdate: (id: string, updates: Partial<CanvasDesign>) => void
   onRotate?: (id: string, rotation: number) => void
+  onResizeEnd?: () => void
 }
 
-export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, onSelect, onUpdate, onRotate }: Props) {
+export default function TshirtCanvas({
+  designs,
+  selectedId,
+  tshirtColour,
+  view,
+  onSelect,
+  onUpdate,
+  onRotate,
+  onResizeEnd,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [dragging, setDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizing, setResizing] = useState(false)
-  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, w: 0, h: 0 })
+  const [resizeStart, setResizeStart] = useState({
+    x: 0, y: 0, w: 0, h: 0, ox: 0, oy: 0, aspect: 1,
+  })
   const [rotating, setRotating] = useState(false)
   const [rotateStart, setRotateStart] = useState({ x: 0, y: 0, angle: 0 })
+  const [cursor, setCursor] = useState('crosshair')
+
   const imagesCache = useRef<Record<string, HTMLImageElement>>({})
+
+  const PRINT_AREA = PRINT_AREA_PX[view]
 
   const loadImage = useCallback((src: string): Promise<HTMLImageElement> => {
     if (imagesCache.current[src]) return Promise.resolve(imagesCache.current[src])
@@ -75,7 +95,12 @@ export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, 
     ctx.save()
     ctx.fillStyle = 'rgba(99,102,241,0.5)'
     ctx.font = '9px Inter, sans-serif'
-    ctx.fillText(`${view === 'front' ? 'Front' : 'Back'} Printable Area`, PRINT_AREA.x + 4, PRINT_AREA.y - 4)
+    const cm = PRINT_AREA_CM[view]
+    ctx.fillText(
+      `${view === 'front' ? 'Front' : 'Back'} Printable Area · ${cm.width} × ${cm.height} cm`,
+      PRINT_AREA.x + 4,
+      PRINT_AREA.y - 4,
+    )
     ctx.restore()
 
     // Draw designs
@@ -106,9 +131,14 @@ export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, 
         ctx.setLineDash([])
         ctx.strokeRect(-d.width / 2 - 4, -d.height / 2 - 4, d.width + 8, d.height + 8)
 
-        // Resize handle (bottom-right)
+        // Corner resize handles — drag any one to scale the artwork
         ctx.fillStyle = '#6366f1'
-        ctx.fillRect(d.width / 2 - 2, d.height / 2 - 2, 10, 10)
+        const hw = d.width / 2 + 4
+        const hh = d.height / 2 + 4
+        ctx.fillRect(hw - 5, hh - 5, 10, 10)   // bottom-right
+        ctx.fillRect(-hw - 5, hh - 5, 10, 10)  // bottom-left
+        ctx.fillRect(hw - 5, -hh - 5, 10, 10)  // top-right
+        ctx.fillRect(-hw - 5, -hh - 5, 10, 10) // top-left
 
         // Rotate handle (top-center)
         ctx.beginPath()
@@ -150,9 +180,11 @@ export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, 
   }
 
   const isOnResizeHandle = (pos: { x: number; y: number }, d: CanvasDesign) => {
-    const hx = d.x + d.width + 4
-    const hy = d.y + d.height + 4
-    return Math.abs(pos.x - hx) < 12 && Math.abs(pos.y - hy) < 12
+    const l = d.x - 4, r = d.x + d.width + 4
+    const t = d.y - 4, b = d.y + d.height + 4
+    const nearX = Math.abs(pos.x - l) < 12 || Math.abs(pos.x - r) < 12
+    const nearY = Math.abs(pos.y - t) < 12 || Math.abs(pos.y - b) < 12
+    return nearX && nearY
   }
 
   const isOnRotateHandle = (pos: { x: number; y: number }, d: CanvasDesign) => {
@@ -161,10 +193,16 @@ export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, 
     return Math.hypot(pos.x - cx, pos.y - cy) < 15
   }
 
-  const clampToPrintArea = (x: number, y: number, w: number, h: number) => ({
-    x: Math.max(PRINT_AREA.x, Math.min(x, PRINT_AREA.x + PRINT_AREA.width - w)),
-    y: Math.max(PRINT_AREA.y, Math.min(y, PRINT_AREA.y + PRINT_AREA.height - h)),
-  })
+  const cursorFor = (pos: { x: number; y: number }) => {
+    const d = designs.find(x => x.id === selectedId)
+    if (d && isOnRotateHandle(pos, d)) return 'grab'
+    if (d && isOnResizeHandle(pos, d)) return 'nwse-resize'
+    if (d && hitTest(pos)) return 'move'
+    return 'crosshair'
+  }
+
+  const clampToPrintArea = (x: number, y: number, w: number, h: number) =>
+    clampDesignToArea(view, { x, y, width: w, height: h })
 
   const onMouseDown = (e: React.MouseEvent) => {
     const pos = getPos(e)
@@ -173,7 +211,15 @@ export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, 
     onSelect(hit.id)
     if (isOnResizeHandle(pos, hit)) {
       setResizing(true)
-      setResizeStart({ x: pos.x, y: pos.y, w: hit.width, h: hit.height })
+      const aspect = hit.originalWidth && hit.originalHeight
+        ? hit.originalWidth / hit.originalHeight
+        : hit.width / hit.height
+      setResizeStart({
+        x: pos.x, y: pos.y,
+        w: hit.width, h: hit.height,
+        ox: hit.x, oy: hit.y,
+        aspect,
+      })
     } else if (isOnRotateHandle(pos, hit)) {
       setRotating(true)
       const cx = hit.x + hit.width / 2
@@ -197,13 +243,39 @@ export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, 
       const clamped = clampToPrintArea(nx, ny, d.width, d.height)
       onUpdate(selectedId, clamped)
     } else if (resizing) {
-      const dw = pos.x - resizeStart.x
-      const dh = pos.y - resizeStart.y
-      const nw = Math.max(20, resizeStart.w + dw)
-      const nh = Math.max(20, resizeStart.h + dh)
-      const maxW = PRINT_AREA.x + PRINT_AREA.width - d.x
-      const maxH = PRINT_AREA.y + PRINT_AREA.height - d.y
-      onUpdate(selectedId, { width: Math.min(nw, maxW), height: Math.min(nh, maxH) })
+      const { aspect, ox, oy, w: sw, h: sh } = resizeStart
+      // Scale by how far the pointer is from the design's centre, versus at drag start.
+      // This keeps the behaviour correct no matter which corner handle is dragged.
+      const cx0 = ox + sw / 2
+      const cy0 = oy + sh / 2
+      const dist0 = Math.hypot(resizeStart.x - cx0, resizeStart.y - cy0)
+      const dist = Math.hypot(pos.x - cx0, pos.y - cy0)
+      const scale = dist0 > 0 ? dist / dist0 : 1
+      let nw = Math.max(20, sw * scale)
+      let nh = nw / aspect
+
+      // Never exceed the printable area.
+      const area = PRINT_AREA
+      if (nw > area.width || nh > area.height) {
+        if (nw / area.width > nh / area.height) {
+          nw = area.width
+          nh = nw / aspect
+        } else {
+          nh = area.height
+          nw = nh * aspect
+        }
+      }
+
+      // Grow from the centre so the artwork stays anchored where the user placed it.
+      const nx = ox + (sw - nw) / 2
+      const ny = oy + (sh - nh) / 2
+      const clamped = clampToPrintArea(nx, ny, nw, nh)
+      onUpdate(selectedId, {
+        width: clamped.width,
+        height: clamped.height,
+        x: clamped.x,
+        y: clamped.y,
+      })
     } else if (rotating && onRotate) {
       const cx = d.x + d.width / 2
       const cy = d.y + d.height / 2
@@ -219,17 +291,21 @@ export default function TshirtCanvas({ designs, selectedId, tshirtColour, view, 
     }
   }
 
-  const onMouseUp = () => { setDragging(false); setResizing(false); setRotating(false) }
+  const onMouseUp = () => {
+    const wasResizing = resizing
+    setDragging(false); setResizing(false); setRotating(false)
+    if (wasResizing) onResizeEnd?.()
+  }
 
   return (
     <canvas
       ref={canvasRef}
       width={400}
       height={480}
-      className="w-full max-w-sm mx-auto cursor-crosshair touch-none select-none"
-      style={{ maxHeight: '480px' }}
+      className="w-full max-w-sm mx-auto touch-none select-none"
+      style={{ maxHeight: '480px', cursor }}
       onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
+      onMouseMove={(e) => { onMouseMove(e); setCursor(cursorFor(getPos(e))) }}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     />

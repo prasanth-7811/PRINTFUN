@@ -10,6 +10,12 @@ import type { CanvasDesign } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
 import { PRINT_AREA } from '../config/brand'
+import {
+  type StudioView,
+  PRINT_AREA_CM,
+  pxPerCm,
+  fitDesignToArea,
+} from '../config/printArea'
 
 const TSHIRT_COLOURS = [
   { name: 'Black', hex: '#1a1a1a' },
@@ -25,11 +31,8 @@ const TSHIRT_COLOURS = [
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
 const BASE_PRICE = 599
 const FONTS = ['Inter', 'Georgia', 'Impact', 'Courier New', 'Arial Black']
-const CM_TO_PX = 37.8
-const MAX_PRINT_WIDTH_CM = 30
-const MAX_PRINT_HEIGHT_CM = 36
 
-type View = 'front' | 'back'
+type View = StudioView
 
 interface DesignWithView {
   front: CanvasDesign[]
@@ -80,9 +83,10 @@ export default function DesignStudioPage() {
       const img = new Image()
       img.crossOrigin = 'anonymous'
       img.onload = () => {
+        const fit = fitDesignToArea('front', img.naturalWidth, img.naturalHeight)
         const d: CanvasDesign = {
           id: nanoid(), type: 'image', src: designImage,
-          x: 120, y: 140, width: 160, height: 160, rotation: 0,
+          x: fit.x, y: fit.y, width: fit.width, height: fit.height, rotation: 0,
           originalWidth: img.naturalWidth, originalHeight: img.naturalHeight,
         }
         setFrontDesigns([d])
@@ -138,9 +142,10 @@ export default function DesignStudioPage() {
   }
 
   const handleUpload = (_file: File, dataUrl: string, w: number, h: number) => {
+    const fit = fitDesignToArea(view, w, h)
     const d: CanvasDesign = {
       id: nanoid(), type: 'image', src: dataUrl,
-      x: 120, y: 140, width: 160, height: 160, rotation: 0,
+      x: fit.x, y: fit.y, width: fit.width, height: fit.height, rotation: 0,
       originalWidth: w, originalHeight: h,
     }
     const next = [...designs, d]
@@ -163,28 +168,45 @@ export default function DesignStudioPage() {
   const selected = designs.find(d => d.id === selectedId)
   const totalQty = Object.values(sizeQty).reduce((a, b) => a + b, 0)
 
-  // Calculate dimensions in cm
+  // Max printable size for the side currently being edited
+  const maxPrint = PRINT_AREA_CM[view]
+  const MAX_PRINT_WIDTH_CM = maxPrint.width
+  const MAX_PRINT_HEIGHT_CM = maxPrint.height
+
+  // Calculate dimensions in cm (print scale depends on the active side)
   const getDimensionsCm = (d: CanvasDesign) => ({
-    width: d.width / CM_TO_PX,
-    height: d.height / CM_TO_PX,
+    width: d.width / pxPerCm(view),
+    height: d.height / pxPerCm(view),
   })
+
+  // Real printed size (in cm) of the largest design on a given side — used for the
+  // order record so production knows what size to print.
+  const largestDesignCm = (v: StudioView, list: CanvasDesign[]) => {
+    const scale = pxPerCm(v)
+    const biggest = list.reduce((best, d) =>
+      (d.width * d.height) > (best.width * best.height) ? d : best, list[0])
+    return {
+      width: +(biggest.width / scale).toFixed(1),
+      height: +(biggest.height / scale).toFixed(1),
+    }
+  }
 
   const handleDimensionChange = (dim: 'width' | 'height', value: string) => {
     if (!selected) return
     const num = parseFloat(value)
     if (isNaN(num) || num <= 0) return
-    
+
     const maxCm = dim === 'width' ? MAX_PRINT_WIDTH_CM : MAX_PRINT_HEIGHT_CM
     if (num > maxCm) return
-    
-    const px = num * CM_TO_PX
-    
+
+    const px = num * pxPerCm(view)
+
     if (lockAspect && selected.originalWidth && selected.originalHeight) {
       const aspect = selected.originalWidth / selected.originalHeight
       const otherPx = dim === 'width' ? px / aspect : px * aspect
       const otherCm = dim === 'width' ? num / aspect : num * aspect
       const otherMaxCm = dim === 'width' ? MAX_PRINT_HEIGHT_CM : MAX_PRINT_WIDTH_CM
-      
+
       if (otherCm <= otherMaxCm) {
         updateDesign(selectedId!, { [dim]: px, [dim === 'width' ? 'height' : 'width']: otherPx })
       }
@@ -205,8 +227,12 @@ export default function DesignStudioPage() {
         colour: colour.name, colour_hex: colour.hex, sizes: sizeQty,
         front_design: JSON.stringify(frontDesigns),
         back_design: JSON.stringify(backDesigns),
-        front_dimensions: { width: MAX_PRINT_WIDTH_CM, height: MAX_PRINT_HEIGHT_CM },
-        back_dimensions: { width: MAX_PRINT_WIDTH_CM, height: MAX_PRINT_HEIGHT_CM },
+        front_dimensions: frontDesigns.length
+          ? largestDesignCm('front', frontDesigns)
+          : PRINT_AREA.front,
+        back_dimensions: backDesigns.length
+          ? largestDesignCm('back', backDesigns)
+          : PRINT_AREA.back,
       })
       navigate('/cart')
     } catch {
@@ -437,6 +463,12 @@ export default function DesignStudioPage() {
                 onSelect={setSelectedId}
                 onUpdate={updateDesign}
                 onRotate={rotateDesign}
+                onResizeEnd={() =>
+                  pushHistory(
+                    view === 'front' ? frontDesigns : backDesigns,
+                    view === 'back' ? backDesigns : frontDesigns,
+                  )
+                }
               />
             </div>
 

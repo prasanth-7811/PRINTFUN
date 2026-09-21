@@ -17,7 +17,7 @@ export const CURRENCY = '₹'
 
 export const PRINT_AREA = {
   front: { width: 30, height: 36 }, // cm
-  back: { width: 30, height: 36 },
+  back: { width: 29.7, height: 42 }, // cm — up to A3 (297 × 420 mm)
 }
 
 export const PRICING = {
