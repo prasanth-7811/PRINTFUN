@@ -23,22 +23,51 @@ export interface Product {
   review_count: number
   is_featured: boolean
   is_new: boolean
+  is_active: boolean
   tags: string[]
+  /** which audiences this category is available for */
+  audiences: Audience[]
+  gsm?: number | null
+  fabric?: string | null
+  coming_soon: boolean
+  variants: ProductVariant[]
 }
 
 export type ProductType =
-  | 'Regular Fit'
-  | 'Oversized'
+  | 'Round Neck'
   | 'Polo'
+  | 'Oversized'
+  | 'Hoodies'
+  | 'Regular Fit'
   | 'Full Sleeve'
   | 'Half Sleeve'
-  | 'Round Neck'
   | 'V-Neck'
+
+export type Audience = 'kids' | 'adults'
 
 export interface ProductColour {
   name: string
   hex: string
-  stock: Record<string, number> // size -> qty
+}
+
+export interface ProductVariant {
+  id: number
+  product_id: number
+  name: string
+  slug: string
+  audience: Audience
+  /** null while kids pricing is unconfigured — not purchasable */
+  price: number | null
+  fabric?: string | null
+  material?: string | null
+  gsm?: number | null
+  colours: ProductColour[]
+  sizes: string[]
+  images: string[]
+  is_active: boolean
+  coming_soon: boolean
+  /** has price + sizes + colours, i.e. can be bought */
+  configured: boolean
 }
 
 export interface Design {

@@ -1,27 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Search, SlidersHorizontal, X, Heart, Eye } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
 import { CURRENCY } from '../config/brand'
+import { productService } from '../services/products'
+import type { Product, Audience } from '../types'
 
-const MOCK_PRODUCTS = [
-  { id: 1, name: 'Classic Oversized Tee', type: 'Oversized', price: 599, rating: 4.8, reviews: 124, image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&q=80', colours: [{ name: 'Black', hex: '#000000' }, { name: 'White', hex: '#ffffff' }], stock: 'in_stock', is_new: false, is_featured: true },
-  { id: 2, name: 'Premium Round Neck', type: 'Round Neck', price: 499, rating: 4.6, reviews: 89, image: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=400&q=80', colours: [{ name: 'Navy', hex: '#1e3a5f' }, { name: 'Black', hex: '#000000' }], stock: 'in_stock', is_new: true, is_featured: false },
-  { id: 3, name: 'Streetwear Drop Shoulder', type: 'Oversized', price: 699, rating: 4.9, reviews: 201, image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400&q=80', colours: [{ name: 'White', hex: '#ffffff' }, { name: 'Grey', hex: '#d4d4d4' }], stock: 'in_stock', is_new: false, is_featured: true },
-  { id: 4, name: 'V-Neck Essential', type: 'V-Neck', price: 449, rating: 4.5, reviews: 67, image: 'https://images.unsplash.com/photo-1562157873-818bc0726f68?w=400&q=80', colours: [{ name: 'Black', hex: '#000000' }, { name: 'White', hex: '#ffffff' }], stock: 'low_stock', is_new: false, is_featured: false },
-  { id: 5, name: 'Polo Classic', type: 'Polo', price: 799, rating: 4.7, reviews: 55, image: 'https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=400&q=80', colours: [{ name: 'Navy', hex: '#1e3a5f' }, { name: 'White', hex: '#ffffff' }], stock: 'in_stock', is_new: true, is_featured: false },
-  { id: 6, name: 'Full Sleeve Comfort', type: 'Full Sleeve', price: 649, rating: 4.4, reviews: 43, image: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=400&q=80', colours: [{ name: 'Grey', hex: '#6b7280' }, { name: 'Black', hex: '#000000' }], stock: 'in_stock', is_new: false, is_featured: false },
-  { id: 7, name: 'Minimal Half Sleeve', type: 'Half Sleeve', price: 399, rating: 4.3, reviews: 31, image: 'https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=400&q=80', colours: [{ name: 'White', hex: '#ffffff' }, { name: 'Red', hex: '#dc2626' }], stock: 'out_of_stock', is_new: false, is_featured: false },
-  { id: 8, name: 'Urban Oversized Fit', type: 'Oversized', price: 749, rating: 4.8, reviews: 178, image: 'https://images.unsplash.com/photo-1529374255404-311a2a4f1fd9?w=400&q=80', colours: [{ name: 'Black', hex: '#000000' }, { name: 'Green', hex: '#16a34a' }], stock: 'in_stock', is_new: true, is_featured: true },
-]
-
-const TYPES = ['Regular Fit', 'Oversized', 'Polo', 'Full Sleeve', 'Half Sleeve', 'Round Neck', 'V-Neck']
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
 const PRICE_RANGES = [
-  { label: 'Under ₹499', min: 0, max: 499 },
-  { label: '₹500–₹999', min: 500, max: 999 },
-  { label: '₹1000–₹1499', min: 1000, max: 1499 },
-  { label: '₹1500+', min: 1500, max: Infinity },
+  { label: 'Under ₹150', min: 0, max: 149 },
+  { label: '₹150–₹299', min: 150, max: 299 },
+  { label: '₹300–₹499', min: 300, max: 499 },
+  { label: '₹500+', min: 500, max: Infinity },
 ]
 
 export default function ShopPage() {
@@ -29,45 +19,64 @@ export default function ShopPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [selectedTypes, setSelectedTypes] = useState<string[]>([])
+  const [selectedAudience, setSelectedAudience] = useState<Audience | ''>('')
   const [selectedColours, setSelectedColours] = useState<string[]>([])
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([])
+  const [selectedGsm, setSelectedGsm] = useState<number[]>([])
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null)
   const [sort, setSort] = useState('featured')
   const [wishlist, setWishlist] = useState<number[]>([])
 
+  const { data: filterFacets } = useQuery({
+    queryKey: ['product-filters'],
+    queryFn: productService.getFilters,
+  })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['products', { sort, include_inactive: false }],
+    queryFn: () => productService.getProducts({ sort, include_inactive: false }),
+  })
+
+  const products = data?.items ?? []
+
   const toggle = (arr: string[], val: string, set: (v: string[]) => void) =>
     set(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
 
-  const filtered = MOCK_PRODUCTS.filter(p => {
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.type.toLowerCase().includes(search.toLowerCase())) return false
-    if (selectedTypes.length && !selectedTypes.includes(p.type)) return false
-    if (selectedColours.length && !p.colours.some(c => selectedColours.includes(c.name))) return false
-    if (selectedPrice !== null) {
-      const range = PRICE_RANGES[selectedPrice]
-      if (p.price < range.min || p.price > range.max) return false
-    }
-    return true
-  }).sort((a, b) => {
-    if (sort === 'price_asc') return a.price - b.price
-    if (sort === 'price_desc') return b.price - a.price
-    if (sort === 'rating') return b.rating - a.rating
-    if (sort === 'newest') return b.is_new ? 1 : -1
-    return b.is_featured ? 1 : -1
-  })
+  const toggleNum = (arr: number[], val: number, set: (v: number[]) => void) =>
+    set(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
+
+  const filtered = useMemo(() => {
+    return products.filter(p => {
+      if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.type.toLowerCase().includes(search.toLowerCase())) return false
+      if (selectedTypes.length && !selectedTypes.includes(p.type)) return false
+      if (selectedAudience && !(p.audiences || []).includes(selectedAudience)) return false
+      if (selectedColours.length && !(p.colours || []).some(c => selectedColours.includes(c.name))) return false
+      if (selectedGsm.length && !(p.gsm && selectedGsm.includes(p.gsm))) return false
+      if (selectedPrice !== null) {
+        const range = PRICE_RANGES[selectedPrice]
+        if (p.base_price < range.min || p.base_price > range.max) return false
+      }
+      return true
+    })
+  }, [products, search, selectedTypes, selectedAudience, selectedColours, selectedGsm, selectedPrice])
 
   const clearFilters = () => {
-    setSelectedTypes([]); setSelectedColours([]); setSelectedSizes([]); setSelectedPrice(null); setSearch('')
+    setSelectedTypes([]); setSelectedAudience(''); setSelectedColours([])
+    setSelectedGsm([]); setSelectedPrice(null); setSearch('')
   }
 
-  const hasFilters = selectedTypes.length || selectedColours.length || selectedSizes.length || selectedPrice !== null || search
+  const hasFilters = selectedTypes.length || selectedAudience || selectedColours.length ||
+    selectedGsm.length || selectedPrice !== null || search
+
+  const audienceLabel = (p: Product) =>
+    (p.audiences || []).map(a => a === 'kids' ? 'Kids' : 'Adults').join(' + ')
 
   const FilterPanel = () => (
     <div className="space-y-6">
-      {/* Types */}
+      {/* Category */}
       <div>
-        <h4 className="font-semibold text-sm text-zinc-900 mb-3">T-Shirt Type</h4>
+        <h4 className="font-semibold text-sm text-zinc-900 mb-3">Category</h4>
         <div className="space-y-2">
-          {TYPES.map(t => (
+          {(filterFacets?.types || []).map(t => (
             <label key={t} className="flex items-center gap-2.5 cursor-pointer group">
               <input type="checkbox" checked={selectedTypes.includes(t)} onChange={() => toggle(selectedTypes, t, setSelectedTypes)} className="rounded border-zinc-300 text-black focus:ring-black" />
               <span className="text-sm text-zinc-600 group-hover:text-zinc-900">{t}</span>
@@ -75,29 +84,45 @@ export default function ShopPage() {
           ))}
         </div>
       </div>
+
+      {/* Audience */}
+      <div>
+        <h4 className="font-semibold text-sm text-zinc-900 mb-3">Available For</h4>
+        <div className="flex gap-2">
+          {['', 'kids', 'adults'].map(a => (
+            <button key={a || 'all'} onClick={() => setSelectedAudience(a as Audience | '')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${selectedAudience === a ? 'bg-black text-white border-black' : 'border-zinc-200 text-zinc-600 hover:border-zinc-400'}`}>
+              {a === '' ? 'All' : a === 'kids' ? 'Kids' : 'Adults'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Colours */}
       <div>
         <h4 className="font-semibold text-sm text-zinc-900 mb-3">Colour</h4>
         <div className="flex flex-wrap gap-2">
-          {[{ name: 'Black', hex: '#000' }, { name: 'White', hex: '#fff' }, { name: 'Grey', hex: '#9ca3af' }, { name: 'Navy', hex: '#1e3a5f' }, { name: 'Red', hex: '#dc2626' }, { name: 'Green', hex: '#16a34a' }].map(c => (
+          {(filterFacets?.colours || []).map(c => (
             <button key={c.name} onClick={() => toggle(selectedColours, c.name, setSelectedColours)} title={c.name}
               className={`w-7 h-7 rounded-full border-2 transition-all ${selectedColours.includes(c.name) ? 'border-black scale-110' : 'border-zinc-200 hover:border-zinc-400'}`}
               style={{ background: c.hex }} />
           ))}
         </div>
       </div>
-      {/* Sizes */}
+
+      {/* GSM */}
       <div>
-        <h4 className="font-semibold text-sm text-zinc-900 mb-3">Size</h4>
+        <h4 className="font-semibold text-sm text-zinc-900 mb-3">GSM</h4>
         <div className="flex flex-wrap gap-2">
-          {SIZES.map(s => (
-            <button key={s} onClick={() => toggle(selectedSizes, s, setSelectedSizes)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${selectedSizes.includes(s) ? 'bg-black text-white border-black' : 'border-zinc-200 text-zinc-600 hover:border-zinc-400'}`}>
-              {s}
+          {(filterFacets?.gsm || []).map(g => (
+            <button key={g} onClick={() => toggleNum(selectedGsm, g, setSelectedGsm)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${selectedGsm.includes(g) ? 'bg-black text-white border-black' : 'border-zinc-200 text-zinc-600 hover:border-zinc-400'}`}>
+              {g}
             </button>
           ))}
         </div>
       </div>
+
       {/* Price */}
       <div>
         <h4 className="font-semibold text-sm text-zinc-900 mb-3">Price Range</h4>
@@ -136,7 +161,7 @@ export default function ShopPage() {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products..." className="w-full pl-9 pr-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
           </div>
           <button onClick={() => setFiltersOpen(!filtersOpen)} className="lg:hidden flex items-center gap-2 px-4 py-2.5 border border-zinc-200 rounded-xl text-sm font-medium hover:bg-zinc-50">
-            <SlidersHorizontal size={16} /> Filters {hasFilters ? `(${[selectedTypes.length, selectedColours.length, selectedSizes.length, selectedPrice !== null ? 1 : 0].reduce((a, b) => a + b, 0)})` : ''}
+            <SlidersHorizontal size={16} /> Filters {hasFilters ? `(${[selectedTypes.length, selectedAudience ? 1 : 0, selectedColours.length, selectedGsm.length, selectedPrice !== null ? 1 : 0].reduce((a, b) => a + b, 0)})` : ''}
           </button>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-sm text-zinc-400 hidden sm:block">{filtered.length} products</span>
@@ -172,7 +197,20 @@ export default function ShopPage() {
 
           {/* Products Grid */}
           <div className="flex-1">
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-zinc-100 overflow-hidden animate-pulse">
+                    <div className="aspect-square bg-zinc-100" />
+                    <div className="p-3 space-y-2">
+                      <div className="h-3 bg-zinc-100 rounded w-1/3" />
+                      <div className="h-3 bg-zinc-100 rounded w-3/4" />
+                      <div className="h-3 bg-zinc-100 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-zinc-400 text-lg mb-4">No products found</p>
                 <button onClick={clearFilters} className="text-sm text-black underline">Clear filters</button>
@@ -182,9 +220,11 @@ export default function ShopPage() {
                 {filtered.map(p => (
                   <div key={p.id} className="group bg-white rounded-2xl border border-zinc-100 overflow-hidden hover:shadow-lg transition-all duration-300">
                     <div className="relative aspect-square bg-zinc-50 overflow-hidden">
-                      <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                      <img src={p.images?.[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                       {p.is_new && <span className="absolute top-2 left-2 bg-black text-white text-xs font-semibold px-2 py-0.5 rounded-full">New</span>}
-                      {p.stock === 'out_of_stock' && <div className="absolute inset-0 bg-white/60 flex items-center justify-center"><span className="bg-white text-zinc-600 text-xs font-semibold px-3 py-1 rounded-full border">Out of Stock</span></div>}
+                      {p.coming_soon && (
+                        <span className="absolute top-2 left-2 bg-amber-400 text-black text-xs font-semibold px-2 py-0.5 rounded-full">Coming Soon</span>
+                      )}
                       <div className="absolute top-2 right-2 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => setWishlist(w => w.includes(p.id) ? w.filter(x => x !== p.id) : [...w, p.id])} className="p-1.5 bg-white rounded-lg shadow-sm hover:bg-zinc-50">
                           <Heart size={14} fill={wishlist.includes(p.id) ? '#ef4444' : 'none'} stroke={wishlist.includes(p.id) ? '#ef4444' : 'currentColor'} />
@@ -197,18 +237,25 @@ export default function ShopPage() {
                     <div className="p-3">
                       <p className="text-xs text-zinc-400 mb-0.5">{p.type}</p>
                       <h3 className="font-semibold text-zinc-900 text-sm mb-1.5 line-clamp-1">{p.name}</h3>
+                      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                        <span className="text-xs font-medium text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{audienceLabel(p)}</span>
+                        {p.gsm && <span className="text-xs font-medium text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{p.gsm} GSM</span>}
+                      </div>
                       <div className="flex items-center gap-1.5 mb-2">
                         <StarRating rating={p.rating} size={11} />
-                        <span className="text-xs text-zinc-400">({p.reviews})</span>
+                        <span className="text-xs text-zinc-400">({p.review_count})</span>
                       </div>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="font-bold text-zinc-900 text-sm">{CURRENCY}{p.price}</span>
+                        <span className="font-bold text-zinc-900 text-sm">
+                          {p.coming_soon ? 'Coming Soon' : <>{CURRENCY}{p.base_price}<span className="text-xs font-normal text-zinc-400"> onwards</span></>}
+                        </span>
                         <div className="flex gap-1">
-                          {p.colours.map(c => <span key={c.name} className="w-3.5 h-3.5 rounded-full border border-zinc-200" style={{ background: c.hex }} />)}
+                          {(p.colours || []).slice(0, 5).map(c => <span key={c.name} title={c.name} className="w-3.5 h-3.5 rounded-full border border-zinc-200" style={{ background: c.hex }} />)}
+                          {(p.colours || []).length > 5 && <span className="text-xs text-zinc-400">+{p.colours.length - 5}</span>}
                         </div>
                       </div>
                       <div className="flex gap-1.5">
-                        <Link to={`/product/${p.id}`} className="flex-1 text-center py-1.5 text-xs font-medium border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors">View</Link>
+                        <Link to={`/product/${p.id}`} className="flex-1 text-center py-1.5 text-xs font-medium border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors">View Details</Link>
                         <Link to={`/design-studio?product=${p.id}`} className="flex-1 text-center py-1.5 text-xs font-medium bg-black text-white rounded-lg hover:bg-zinc-800 transition-colors">Customize</Link>
                       </div>
                     </div>

@@ -1,15 +1,17 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Trash2, Copy, Undo2, Redo2, Type, ShoppingCart, RotateCcw, Minus, Plus, Lock, Unlock } from 'lucide-react'
 import { nanoid } from 'nanoid'
+import { useQuery } from '@tanstack/react-query'
 import TshirtCanvas from '../components/studio/TshirtCanvas'
 import UploadPanel from '../components/studio/UploadPanel'
 import PricePanel from '../components/studio/PricePanel'
 import QualityIndicator from '../components/studio/QualityIndicator'
-import type { CanvasDesign } from '../types'
+import type { CanvasDesign, Audience } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
 import { PRINT_AREA } from '../config/brand'
+import { productService } from '../services/products'
 import {
   type StudioView,
   PRINT_AREA_CM,
@@ -17,7 +19,7 @@ import {
   fitDesignToArea,
 } from '../config/printArea'
 
-const TSHIRT_COLOURS = [
+const FALLBACK_COLOURS = [
   { name: 'Black', hex: '#1a1a1a' },
   { name: 'White', hex: '#f5f5f5' },
   { name: 'Grey', hex: '#9ca3af' },
@@ -27,9 +29,8 @@ const TSHIRT_COLOURS = [
   { name: 'Yellow', hex: '#eab308' },
   { name: 'Purple', hex: '#7c3aed' },
 ]
-
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
-const BASE_PRICE = 599
+const FALLBACK_SIZES = ['S', 'M', 'L', 'XL', '2XL']
+const FALLBACK_PRICE = 599
 const FONTS = ['Inter', 'Georgia', 'Impact', 'Courier New', 'Arial Black']
 
 type View = StudioView
@@ -45,7 +46,7 @@ export default function DesignStudioPage() {
   const { isAuthenticated } = useAuth()
   const { addItem } = useCart()
 
-  const [colour, setColour] = useState(TSHIRT_COLOURS[0])
+  const [colour, setColour] = useState(FALLBACK_COLOURS[0])
   const [view, setView] = useState<View>('front')
   const [frontDesigns, setFrontDesigns] = useState<CanvasDesign[]>([])
   const [backDesigns, setBackDesigns] = useState<CanvasDesign[]>([])
@@ -64,6 +65,55 @@ export default function DesignStudioPage() {
   const [addingToCart, setAddingToCart] = useState(false)
   const [lockAspect, setLockAspect] = useState(true)
 
+  // --- Resolve the product + variant being customised ---------------------
+  const productIdParam = searchParams.get('product')
+  const { data: product } = useQuery({
+    queryKey: ['product', productIdParam],
+    queryFn: () => productService.getProduct(productIdParam!),
+    enabled: !!productIdParam,
+  })
+
+  const audienceParam = (searchParams.get('audience') as Audience | null) || null
+  const variantParam = searchParams.get('variant')
+
+  const variant = useMemo(() => {
+    if (!product) return null
+    const variants = product.variants || []
+    if (variantParam) {
+      const byId = variants.find(v => String(v.id) === variantParam)
+      if (byId) return byId
+    }
+    const wantedAudience = audienceParam || 'adults'
+    return variants.find(v => v.audience === wantedAudience && v.configured && v.is_active)
+      || variants.find(v => v.configured && v.is_active)
+      || variants[0]
+      || null
+  }, [product, variantParam, audienceParam])
+
+  // Only the colours/sizes this variant actually offers.
+  const productColours = variant?.colours?.length ? variant.colours : (product?.colours?.length ? product.colours : FALLBACK_COLOURS)
+  const productSizes = variant?.sizes?.length ? variant.sizes : (product?.sizes?.length ? product.sizes : FALLBACK_SIZES)
+  const unitPrice = variant?.price ?? product?.base_price ?? FALLBACK_PRICE
+  const buyable = !!(variant && variant.configured && !variant.coming_soon && !product?.coming_soon)
+
+  // Keep the chosen colour inside the variant's available colours.
+  useEffect(() => {
+    if (!productColours.some(c => c.name === colour.name)) {
+      setColour(productColours[0] || FALLBACK_COLOURS[0])
+    }
+  }, [productColours, colour.name])
+
+  // Drop any quantity for a size this variant doesn't offer.
+  useEffect(() => {
+    setSizeQty(prev => {
+      const next: Record<string, number> = {}
+      Object.entries(prev).forEach(([size, qty]) => {
+        if (productSizes.includes(size) && qty > 0) next[size] = qty
+      })
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next
+    })
+  }, [productSizes])
+
   const designs = view === 'front' ? frontDesigns : backDesigns
   const setDesigns = view === 'front' ? setFrontDesigns : setBackDesigns
 
@@ -75,7 +125,8 @@ export default function DesignStudioPage() {
     const colourParam = searchParams.get('colour')
     
     if (colourParam) {
-      const c = TSHIRT_COLOURS.find(x => x.name.toLowerCase() === colourParam.toLowerCase())
+      const c = productColours.find(x => x.name.toLowerCase() === colourParam.toLowerCase())
+        || FALLBACK_COLOURS.find(x => x.name.toLowerCase() === colourParam.toLowerCase())
       if (c) setColour(c)
     }
     
@@ -217,13 +268,15 @@ export default function DesignStudioPage() {
 
   const handleAddToCart = async () => {
     if (!isAuthenticated) { navigate('/login?redirect=/design-studio'); return }
+    if (!buyable) { alert('This variant is not available for purchase yet. Please contact us for pricing.'); return }
     if (totalQty === 0) { alert('Please select at least one size and quantity.'); return }
     if (frontDesigns.length === 0 && backDesigns.length === 0) { alert('Add a design to continue'); return }
-    
+
     setAddingToCart(true)
     try {
       await addItem({
         product_id: Number(searchParams.get('product') || 1),
+        variant_id: variant?.id,
         colour: colour.name, colour_hex: colour.hex, sizes: sizeQty,
         front_design: JSON.stringify(frontDesigns),
         back_design: JSON.stringify(backDesigns),
@@ -473,15 +526,20 @@ export default function DesignStudioPage() {
             </div>
 
             <div className="bg-white rounded-2xl border border-zinc-100 p-4 w-full max-w-sm">
-              <p className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">T-Shirt Colour</p>
+              <p className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">
+                {product ? `${product.name} — Colour` : 'T-Shirt Colour'}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {TSHIRT_COLOURS.map(c => (
+                {productColours.map(c => (
                   <button key={c.name} onClick={() => setColour(c)} title={c.name}
                     className={`w-8 h-8 rounded-full border-2 transition-all ${colour.name === c.name ? 'border-black scale-110' : 'border-zinc-200 hover:border-zinc-400'}`}
                     style={{ background: c.hex }} />
                 ))}
               </div>
               <p className="text-xs text-zinc-400 mt-2">{colour.name}</p>
+              {variant && (
+                <p className="text-xs text-zinc-400 mt-1">{variant.name} · {variant.audience === 'kids' ? 'Kids' : 'Adults'}</p>
+              )}
             </div>
           </div>
 
@@ -490,7 +548,7 @@ export default function DesignStudioPage() {
             <div className="bg-white rounded-2xl border border-zinc-100 p-4">
               <h3 className="font-semibold text-sm text-zinc-900 mb-3">Sizes & Quantities</h3>
               <div className="space-y-2">
-                {SIZES.map(size => {
+                {productSizes.map(size => {
                   const qty = sizeQty[size] || 0
                   return (
                     <div key={size} className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${qty > 0 ? 'border-black bg-zinc-50' : 'border-zinc-100'}`}>
@@ -505,10 +563,17 @@ export default function DesignStudioPage() {
                 })}
               </div>
               {totalQty > 0 && <p className="text-xs text-zinc-500 mt-2 font-medium">Total: {totalQty} piece{totalQty > 1 ? 's' : ''}</p>}
+              {!buyable && (
+                <p className="text-xs text-amber-600 mt-2 font-medium">
+                  {variant?.audience === 'kids'
+                    ? 'Contact for Kids Pricing — this variant cannot be checked out yet.'
+                    : 'This variant is coming soon.'}
+                </p>
+              )}
             </div>
 
             <PricePanel
-              basePrice={BASE_PRICE}
+              basePrice={unitPrice}
               hasFront={frontDesigns.length > 0}
               hasBack={backDesigns.length > 0}
               totalQty={totalQty}
@@ -519,11 +584,17 @@ export default function DesignStudioPage() {
               <div className="flex justify-between"><span>Front designs</span><span className="font-medium text-zinc-900">{frontDesigns.length}</span></div>
               <div className="flex justify-between"><span>Back designs</span><span className="font-medium text-zinc-900">{backDesigns.length}</span></div>
               <div className="flex justify-between"><span>Colour</span><span className="font-medium text-zinc-900">{colour.name}</span></div>
+              {variant && (
+                <div className="flex justify-between"><span>Variant</span><span className="font-medium text-zinc-900">{variant.name}</span></div>
+              )}
+              {variant?.gsm && (
+                <div className="flex justify-between"><span>GSM</span><span className="font-medium text-zinc-900">{variant.gsm}</span></div>
+              )}
             </div>
 
             <button
               onClick={handleAddToCart}
-              disabled={addingToCart || !hasDesigns || totalQty === 0}
+              disabled={addingToCart || !hasDesigns || totalQty === 0 || !buyable}
               className="w-full bg-black text-white py-4 rounded-2xl font-bold text-sm hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {addingToCart
@@ -531,10 +602,13 @@ export default function DesignStudioPage() {
                 : <><ShoppingCart size={16} /> Add to Cart</>
               }
             </button>
-            {!hasDesigns && (
+            {!buyable && (
+              <p className="text-xs text-amber-600 text-center">Not available for purchase yet</p>
+            )}
+            {buyable && !hasDesigns && (
               <p className="text-xs text-zinc-400 text-center">Add a design to continue</p>
             )}
-            {hasDesigns && totalQty === 0 && (
+            {buyable && hasDesigns && totalQty === 0 && (
               <p className="text-xs text-zinc-400 text-center">Select at least one size</p>
             )}
           </div>

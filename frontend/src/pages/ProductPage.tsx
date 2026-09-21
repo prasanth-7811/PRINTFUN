@@ -1,33 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Heart, ShieldCheck, Truck, RotateCcw, Star } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
 import { CURRENCY } from '../config/brand'
-
-const MOCK_PRODUCT = {
-  id: 1,
-  name: 'Classic Oversized Tee',
-  type: 'Oversized',
-  price: 599,
-  rating: 4.8,
-  reviews: 124,
-  description: 'Our signature oversized tee is crafted from 100% premium ring-spun cotton. The relaxed drop-shoulder silhouette gives you that effortlessly cool streetwear look. Perfect for custom prints — the large flat surface area ensures your design stands out.',
-  material: '100% Ring-Spun Cotton, 220 GSM',
-  fit: 'Oversized / Drop Shoulder',
-  images: [
-    'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&q=80',
-    'https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=600&q=80',
-    'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&q=80',
-    'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&q=80',
-  ],
-  colours: [
-    { name: 'Black', hex: '#000000', stock: { S: 10, M: 15, L: 8, XL: 5, XXL: 3 } },
-    { name: 'White', hex: '#ffffff', stock: { S: 12, M: 20, L: 10, XL: 7, XXL: 2 } },
-    { name: 'Grey', hex: '#9ca3af', stock: { S: 5, M: 8, L: 4, XL: 2, XXL: 0 } },
-    { name: 'Navy', hex: '#1e3a5f', stock: { S: 8, M: 12, L: 6, XL: 4, XXL: 1 } },
-  ],
-  sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-}
+import { productService } from '../services/products'
+import type { Product, ProductVariant, Audience } from '../types'
 
 const MOCK_REVIEWS = [
   { name: 'Arjun Mehta', rating: 5, text: 'Perfect fit and the print quality is outstanding. Ordered 3 pieces for my team.', date: '2 weeks ago', verified: true },
@@ -36,22 +14,66 @@ const MOCK_REVIEWS = [
 ]
 
 export default function ProductPage() {
-  const product = MOCK_PRODUCT
+  const { id } = useParams()
+  const { data: product, isLoading } = useQuery({
+    queryKey: ['product', id],
+    queryFn: () => productService.getProduct(id!),
+    enabled: !!id,
+  })
+
   const [activeImage, setActiveImage] = useState(0)
-  const [selectedColour, setSelectedColour] = useState(product.colours[0])
+  const [audience, setAudience] = useState<Audience>('adults')
+  const [variant, setVariant] = useState<ProductVariant | null>(null)
+  const [selectedColour, setSelectedColour] = useState<string>('')
   const [sizeQty, setSizeQty] = useState<Record<string, number>>({})
   const [wishlisted, setWishlisted] = useState(false)
 
+  // Reset selection whenever the product or audience changes.
+  useEffect(() => {
+    if (!product) return
+    const first = product.variants.find(v => v.audience === audience && v.is_active) || null
+    setVariant(first)
+    setSelectedColour(first?.colours?.[0]?.name || '')
+    setSizeQty({})
+    setActiveImage(0)
+  }, [product?.id, audience])
+
   const totalQty = Object.values(sizeQty).reduce((a, b) => a + b, 0)
+
+  if (isLoading || !product) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20">
+        <div className="grid lg:grid-cols-2 gap-12 animate-pulse">
+          <div className="aspect-square bg-zinc-100 rounded-2xl" />
+          <div className="space-y-4">
+            <div className="h-8 bg-zinc-100 rounded w-2/3" />
+            <div className="h-6 bg-zinc-100 rounded w-1/3" />
+            <div className="h-24 bg-zinc-100 rounded" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const images = variant?.images?.length ? variant.images : product.images
+  const availableAudiences = product.audiences || ['adults']
+  const variantColourObjects = variant?.colours || []
+  const variantSizes = variant?.sizes || []
+
+  // A kids variant with no sizes/price is "contact for pricing", not buyable.
+  const unconfigured = !variant || !variant.configured
+  const comingSoon = product.coming_soon || !!variant?.coming_soon
 
   const updateQty = (size: string, delta: number) => {
     setSizeQty(prev => {
       const current = prev[size] || 0
-      const next = Math.max(0, current + delta)
-      const stock = selectedColour.stock[size as keyof typeof selectedColour.stock] || 0
-      return { ...prev, [size]: Math.min(next, stock) }
+      return { ...prev, [size]: Math.max(0, current + delta) }
     })
   }
+
+  const customizeLink = variant
+    ? `/design-studio?product=${product.id}&variant=${variant.id}&colour=${encodeURIComponent(selectedColour)}&audience=${audience}`
+    : `/design-studio?product=${product.id}&audience=${audience}`
 
   return (
     <div className="min-h-screen bg-white">
@@ -69,15 +91,19 @@ export default function ProductPage() {
           {/* Images */}
           <div className="space-y-3">
             <div className="aspect-square rounded-2xl overflow-hidden bg-zinc-50">
-              <img src={product.images[activeImage]} alt={product.name} className="w-full h-full object-cover" />
+              {images?.[activeImage] && (
+                <img src={images[activeImage]} alt={product.name} className="w-full h-full object-cover" />
+              )}
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {product.images.map((img, i) => (
-                <button key={i} onClick={() => setActiveImage(i)} className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-colors ${activeImage === i ? 'border-black' : 'border-transparent'}`}>
-                  <img src={img} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
+            {images && images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {images.map((img, i) => (
+                  <button key={i} onClick={() => setActiveImage(i)} className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-colors ${activeImage === i ? 'border-black' : 'border-transparent'}`}>
+                    <img src={img} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Details */}
@@ -94,72 +120,130 @@ export default function ProductPage() {
 
             <div className="flex items-center gap-3 mb-5">
               <StarRating rating={product.rating} />
-              <span className="text-sm text-zinc-500">{product.rating} ({product.reviews} reviews)</span>
+              <span className="text-sm text-zinc-500">{product.rating} ({product.review_count} reviews)</span>
             </div>
 
-            <div className="text-3xl font-black text-zinc-900 mb-6">{CURRENCY}{product.price}</div>
+            <div className="text-3xl font-black text-zinc-900 mb-2">
+              {unconfigured || comingSoon
+                ? 'Contact for Pricing'
+                : <>{CURRENCY}{variant?.price}<span className="text-sm font-normal text-zinc-400"> / piece</span></>}
+            </div>
+            <p className="text-xs text-zinc-400 mb-6">
+              Starting at {CURRENCY}{product.base_price} · Custom print charges extra
+            </p>
 
             <p className="text-zinc-600 text-sm leading-relaxed mb-6">{product.description}</p>
 
-            <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
-              <div className="bg-zinc-50 rounded-xl p-3">
-                <p className="text-zinc-400 text-xs mb-1">Material</p>
-                <p className="font-medium text-zinc-800">{product.material}</p>
-              </div>
-              <div className="bg-zinc-50 rounded-xl p-3">
-                <p className="text-zinc-400 text-xs mb-1">Fit</p>
-                <p className="font-medium text-zinc-800">{product.fit}</p>
-              </div>
-            </div>
-
-            {/* Colour */}
+            {/* Audience switch */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-zinc-900 mb-3">Colour: <span className="font-normal text-zinc-500">{selectedColour.name}</span></p>
+              <p className="text-sm font-semibold text-zinc-900 mb-3">Available For</p>
               <div className="flex gap-2">
-                {product.colours.map(c => (
-                  <button key={c.name} onClick={() => { setSelectedColour(c); setSizeQty({}) }} title={c.name}
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${selectedColour.name === c.name ? 'border-black scale-110' : 'border-zinc-200 hover:border-zinc-400'}`}
-                    style={{ background: c.hex }} />
+                {availableAudiences.map(a => (
+                  <button key={a} onClick={() => setAudience(a as Audience)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${audience === a ? 'bg-black text-white border-black' : 'border-zinc-200 text-zinc-600 hover:border-zinc-400'}`}>
+                    {a === 'kids' ? 'Kids' : 'Adults'}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Sizes + Qty */}
-            <div className="mb-8">
-              <p className="text-sm font-semibold text-zinc-900 mb-3">Select Sizes & Quantities</p>
-              <div className="space-y-2">
-                {product.sizes.map(size => {
-                  const stock = selectedColour.stock[size as keyof typeof selectedColour.stock] || 0
-                  const qty = sizeQty[size] || 0
-                  return (
-                    <div key={size} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${qty > 0 ? 'border-black bg-zinc-50' : 'border-zinc-100'} ${stock === 0 ? 'opacity-40' : ''}`}>
-                      <div className="flex items-center gap-3">
-                        <span className="w-10 text-sm font-semibold text-zinc-900">{size}</span>
-                        {stock <= 3 && stock > 0 && <span className="text-xs text-amber-600 font-medium">Only {stock} left</span>}
-                        {stock === 0 && <span className="text-xs text-red-500">Out of stock</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => updateQty(size, -1)} disabled={qty === 0 || stock === 0} className="w-7 h-7 rounded-lg border border-zinc-200 flex items-center justify-center text-sm font-bold hover:bg-zinc-100 disabled:opacity-30">−</button>
-                        <span className="w-6 text-center text-sm font-semibold">{qty}</span>
-                        <button onClick={() => updateQty(size, 1)} disabled={qty >= stock || stock === 0} className="w-7 h-7 rounded-lg border border-zinc-200 flex items-center justify-center text-sm font-bold hover:bg-zinc-100 disabled:opacity-30">+</button>
-                      </div>
-                    </div>
-                  )
-                })}
+            {/* Variant picker */}
+            <div className="mb-6">
+              <p className="text-sm font-semibold text-zinc-900 mb-3">Choose Variant</p>
+              <div className="flex flex-wrap gap-2">
+                {product.variants.filter(v => v.audience === audience).map(v => (
+                  <button key={v.id} onClick={() => { setVariant(v); setSelectedColour(v.colours?.[0]?.name || ''); setSizeQty({}) }}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors text-left ${variant?.id === v.id ? 'bg-black text-white border-black' : 'border-zinc-200 text-zinc-600 hover:border-zinc-400'}`}>
+                    {v.name}
+                  </button>
+                ))}
               </div>
-              {totalQty > 0 && <p className="text-xs text-zinc-500 mt-2">Total: {totalQty} piece{totalQty > 1 ? 's' : ''}</p>}
             </div>
+
+            {/* Spec grid */}
+            <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
+              <div className="bg-zinc-50 rounded-xl p-3">
+                <p className="text-zinc-400 text-xs mb-1">Fabric</p>
+                <p className="font-medium text-zinc-800">{variant?.fabric || 'Not specified'}</p>
+              </div>
+              <div className="bg-zinc-50 rounded-xl p-3">
+                <p className="text-zinc-400 text-xs mb-1">GSM</p>
+                <p className="font-medium text-zinc-800">{variant?.gsm ? `${variant.gsm} GSM` : 'Not specified'}</p>
+              </div>
+              <div className="bg-zinc-50 rounded-xl p-3">
+                <p className="text-zinc-400 text-xs mb-1">Material</p>
+                <p className="font-medium text-zinc-800">{variant?.material || product.material || 'Not specified'}</p>
+              </div>
+              <div className="bg-zinc-50 rounded-xl p-3">
+                <p className="text-zinc-400 text-xs mb-1">Fit</p>
+                <p className="font-medium text-zinc-800">{product.fit || 'Regular Fit'}</p>
+              </div>
+            </div>
+
+            {unconfigured ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-8">
+                <p className="text-sm font-semibold text-amber-800 mb-1">
+                  {audience === 'kids' ? 'Contact for Kids Pricing' : 'Coming Soon'}
+                </p>
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  {audience === 'kids'
+                    ? 'Kids sizes and pricing for this product are being finalised. Call or WhatsApp us and we’ll quote you immediately.'
+                    : 'This variant is on its way. Check back soon.'}
+                </p>
+                <a href={`tel:+91${'6369794482'}`} className="inline-block mt-3 text-xs font-semibold text-black underline">
+                  Call +91 6369794482 for pricing
+                </a>
+              </div>
+            ) : (
+              <>
+                {/* Colour */}
+                <div className="mb-6">
+                  <p className="text-sm font-semibold text-zinc-900 mb-3">Colour: <span className="font-normal text-zinc-500">{selectedColour}</span></p>
+                  <div className="flex gap-2">
+                    {variantColourObjects.map(c => (
+                      <button key={c.name} onClick={() => { setSelectedColour(c.name); setSizeQty({}) }} title={c.name}
+                        className={`w-8 h-8 rounded-full border-2 transition-all ${selectedColour === c.name ? 'border-black scale-110' : 'border-zinc-200 hover:border-zinc-400'}`}
+                        style={{ background: c.hex }} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sizes + Qty */}
+                <div className="mb-8">
+                  <p className="text-sm font-semibold text-zinc-900 mb-3">Select Sizes & Quantities</p>
+                  <div className="space-y-2">
+                    {variantSizes.map(size => {
+                      const qty = sizeQty[size] || 0
+                      return (
+                        <div key={size} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${qty > 0 ? 'border-black bg-zinc-50' : 'border-zinc-100'}`}>
+                          <span className="w-10 text-sm font-semibold text-zinc-900">{size}</span>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => updateQty(size, -1)} disabled={qty === 0} className="w-7 h-7 rounded-lg border border-zinc-200 flex items-center justify-center text-sm font-bold hover:bg-zinc-100 disabled:opacity-30">−</button>
+                            <span className="w-6 text-center text-sm font-semibold">{qty}</span>
+                            <button onClick={() => updateQty(size, 1)} className="w-7 h-7 rounded-lg border border-zinc-200 flex items-center justify-center text-sm font-bold hover:bg-zinc-100">+</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {totalQty > 0 && <p className="text-xs text-zinc-500 mt-2">Total: {totalQty} piece{totalQty > 1 ? 's' : ''}</p>}
+                </div>
+              </>
+            )}
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 mb-8">
               <Link
-                to={`/design-studio?product=${product.id}&colour=${encodeURIComponent(selectedColour.name)}`}
+                to={customizeLink}
                 className="flex-1 bg-black text-white py-3.5 rounded-xl font-semibold text-sm text-center hover:bg-zinc-800 transition-colors"
               >
-                Customize This T-Shirt
+                Customize This {product.type === 'Hoodies' ? 'Hoodie' : 'T-Shirt'}
               </Link>
-              <button disabled={totalQty === 0} className="flex-1 border-2 border-black text-black py-3.5 rounded-xl font-semibold text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                Add to Cart
+              <button
+                disabled={unconfigured || comingSoon || totalQty === 0}
+                className="flex-1 border-2 border-black text-black py-3.5 rounded-xl font-semibold text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {unconfigured ? 'Not Available' : 'Add to Cart'}
               </button>
             </div>
 

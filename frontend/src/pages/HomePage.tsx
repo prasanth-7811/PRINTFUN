@@ -1,15 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Sparkles, Shield, Zap, Truck } from 'lucide-react'
 import { StarRating, Accordion } from '../components/ui/index'
 import { ContactSection } from '../components/studio/ContactSection'
 import { CURRENCY } from '../config/brand'
-
-const PRODUCTS = [
-  { id: 1, name: 'Classic Oversized Tee', type: 'Oversized', price: 599, rating: 4.8, reviews: 124, image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&q=80', colours: ['#000000','#ffffff','#6b7280'], badge: 'Best Seller' },
-  { id: 2, name: 'Premium Round Neck', type: 'Round Neck', price: 499, rating: 4.6, reviews: 89, image: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=400&q=80', colours: ['#1e3a5f','#000000','#dc2626'], badge: 'New' },
-  { id: 3, name: 'Streetwear Drop Shoulder', type: 'Oversized', price: 699, rating: 4.9, reviews: 201, image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400&q=80', colours: ['#ffffff','#d4d4d4','#000000'], badge: 'Trending' },
-  { id: 4, name: 'V-Neck Essential', type: 'V-Neck', price: 449, rating: 4.5, reviews: 67, image: 'https://images.unsplash.com/photo-1562157873-818bc0726f68?w=400&q=80', colours: ['#000000','#ffffff','#4b5563'], badge: null },
-]
+import { productService } from '../services/products'
+import type { Product } from '../types'
 
 const REVIEWS = [
   { name: 'Arjun Mehta', rating: 5, text: 'Absolutely love the quality! The print came out crisp and the fabric feels premium. Will definitely order again.', verified: true },
@@ -30,13 +26,13 @@ const FAQ_ITEMS = [
   { question: 'Can I request a return or refund?', answer: 'Returns are accepted within 7 days of delivery for manufacturing defects or incorrect items. Custom-printed items are non-returnable unless defective.' },
 ]
 
-function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
+function ProductCard({ product }: { product: Product }) {
   return (
     <div className="group bg-white rounded-2xl border border-zinc-100 overflow-hidden hover:shadow-lg transition-all duration-300">
       <div className="relative overflow-hidden aspect-square bg-zinc-50">
-        <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-        {product.badge && (
-          <span className="absolute top-3 left-3 bg-black text-white text-xs font-semibold px-2.5 py-1 rounded-full">{product.badge}</span>
+        <img src={product.images?.[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+        {product.is_new && (
+          <span className="absolute top-3 left-3 bg-black text-white text-xs font-semibold px-2.5 py-1 rounded-full">New</span>
         )}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
         <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex gap-2">
@@ -49,13 +45,13 @@ function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
         <h3 className="font-semibold text-zinc-900 text-sm mb-2">{product.name}</h3>
         <div className="flex items-center gap-2 mb-3">
           <StarRating rating={product.rating} size={12} />
-          <span className="text-xs text-zinc-400">({product.reviews})</span>
+          <span className="text-xs text-zinc-400">({product.review_count})</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="font-bold text-zinc-900">{CURRENCY}{product.price}</span>
+          <span className="font-bold text-zinc-900">{CURRENCY}{product.base_price}</span>
           <div className="flex gap-1">
-            {product.colours.map((c) => (
-              <span key={c} className="w-4 h-4 rounded-full border border-zinc-200" style={{ background: c }} />
+            {(product.colours || []).slice(0, 4).map((c) => (
+              <span key={c.name} className="w-4 h-4 rounded-full border border-zinc-200" style={{ background: c.hex }} />
             ))}
           </div>
         </div>
@@ -65,6 +61,10 @@ function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
 }
 
 export default function HomePage() {
+  const { data: featured = [] } = useQuery({
+    queryKey: ['featured-products'],
+    queryFn: productService.getFeatured,
+  })
   return (
     <div className="bg-white">
       {/* Hero */}
@@ -134,7 +134,7 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {PRODUCTS.map((p) => <ProductCard key={p.id} product={p} />)}
+            {featured.slice(0, 4).map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
         </div>
       </section>

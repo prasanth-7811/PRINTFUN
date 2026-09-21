@@ -35,7 +35,7 @@ class Product(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     slug = db.Column(db.String(200), unique=True, nullable=False, index=True)
-    type = db.Column(db.String(50), nullable=False)
+    type = db.Column(db.String(50), nullable=False)          # category: Round Neck / Polo / Oversized / Hoodies
     description = db.Column(db.Text)
     material = db.Column(db.String(200))
     fit = db.Column(db.String(100))
@@ -50,6 +50,14 @@ class Product(TimestampMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     tags = db.Column(db.JSON, default=list)
 
+    # Catalog enrichment
+    audiences = db.Column(db.JSON, default=list)   # subset of ['kids', 'adults']
+    gsm = db.Column(db.Integer)                    # fabric weight
+    fabric = db.Column(db.String(200))             # e.g. "100% RL Combed Cotton"
+    coming_soon = db.Column(db.Boolean, default=False)
+
+    variants = db.relationship('ProductVariant', backref='product', lazy='dynamic',
+                               cascade='all, delete-orphan')
     inventory = db.relationship('Inventory', backref='product', lazy='dynamic')
     reviews = db.relationship('Review', backref='product', lazy='dynamic')
 
@@ -61,6 +69,53 @@ class Product(TimestampMixin, db.Model):
             'colours': self.colours or [], 'sizes': self.sizes or [],
             'rating': self.rating, 'review_count': self.review_count,
             'is_featured': self.is_featured, 'is_new': self.is_new, 'tags': self.tags or [],
+            'audiences': self.audiences or [], 'gsm': self.gsm, 'fabric': self.fabric,
+            'coming_soon': self.coming_soon,
+            'variants': [v.to_dict() for v in self.variants],
+        }
+
+
+class ProductVariant(TimestampMixin, db.Model):
+    """A purchasable variant of a product, scoped to an audience (kids/adults).
+
+    Kids variants are created without sizes/price until the admin configures them;
+    those are surfaced as "Contact for Kids Pricing" and cannot be bought.
+    """
+    __tablename__ = 'product_variants'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    slug = db.Column(db.String(200), nullable=False)
+    audience = db.Column(db.String(20), nullable=False, index=True)  # kids | adults
+    price = db.Column(db.Numeric(10, 2))                             # NULL => not yet configured
+    fabric = db.Column(db.String(200))
+    material = db.Column(db.String(200))
+    gsm = db.Column(db.Integer)
+    colours = db.Column(db.JSON, default=list)                       # [{name, hex}]
+    sizes = db.Column(db.JSON, default=list)                         # [] => not configured
+    images = db.Column(db.JSON, default=list)
+    is_active = db.Column(db.Boolean, default=True)
+    coming_soon = db.Column(db.Boolean, default=False)
+    __table_args__ = (db.UniqueConstraint('product_id', 'slug'),)
+
+    inventory = db.relationship('Inventory', backref='variant', lazy='dynamic',
+                                cascade='all, delete-orphan')
+
+    @property
+    def configured(self) -> bool:
+        """True when this variant has a price and at least one size/colour."""
+        return bool(self.price is not None and self.sizes and self.colours)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'product_id': self.product_id, 'name': self.name,
+            'slug': self.slug, 'audience': self.audience,
+            'price': float(self.price) if self.price is not None else None,
+            'fabric': self.fabric, 'material': self.material, 'gsm': self.gsm,
+            'colours': self.colours or [], 'sizes': self.sizes or [],
+            'images': self.images or [], 'is_active': self.is_active,
+            'coming_soon': self.coming_soon,
+            'configured': self.configured,
         }
 
 
@@ -68,13 +123,17 @@ class Inventory(db.Model):
     __tablename__ = 'inventory'
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
     colour = db.Column(db.String(50), nullable=False)
     size = db.Column(db.String(10), nullable=False)
     stock = db.Column(db.Integer, default=0, nullable=False)
-    __table_args__ = (db.UniqueConstraint('product_id', 'colour', 'size'),)
+    __table_args__ = (
+        db.UniqueConstraint('product_id', 'colour', 'size', 'variant_id'),
+    )
 
     def to_dict(self):
         return {'id': self.id, 'product_id': self.product_id,
+                'variant_id': self.variant_id,
                 'colour': self.colour, 'size': self.size, 'stock': self.stock}
 
 

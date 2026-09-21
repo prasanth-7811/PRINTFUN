@@ -9,6 +9,7 @@ export const cartService = {
 
   async addToCart(data: {
     product_id: number
+    variant_id?: number
     colour: string
     colour_hex: string
     sizes: Record<string, number>

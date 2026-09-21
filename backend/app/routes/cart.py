@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..extensions import db
-from ..models import CartItem, Product
+from ..models import CartItem, Product, ProductVariant
 from ..utils.auth import get_current_user
 
 cart_bp = Blueprint('cart', __name__)
@@ -17,6 +17,21 @@ def calc_total(base_price, has_front, has_back, total_qty):
     subtotal = (base_price + print_cost) * max(total_qty, 1)
     delivery = 0 if subtotal >= FREE_DELIVERY_ABOVE else DELIVERY_BASE
     return subtotal, delivery, subtotal + delivery
+
+
+def resolve_price(data, product):
+    """Return the unit price for the chosen variant, or the product base price.
+
+    Kids variants that haven't been configured (no sizes/price) are never priced
+    and must not be checked out.
+    """
+    variant_id = data.get('variant_id')
+    if variant_id:
+        variant = ProductVariant.query.get(variant_id)
+        if variant and variant.product_id == product.id:
+            # An unconfigured variant carries no price — the guard below rejects it.
+            return (float(variant.price) if variant.price is not None else 0.0), variant
+    return float(product.base_price), None
 
 
 @cart_bp.route('', methods=['GET'])
@@ -39,7 +54,16 @@ def add_to_cart():
     has_front = bool(data.get('front_design'))
     has_back = bool(data.get('back_design'))
 
-    subtotal, delivery, total = calc_total(float(product.base_price), has_front, has_back, total_qty)
+    unit_price, variant = resolve_price(data, product)
+
+    # Unconfigured kids variants cannot be purchased.
+    if variant is not None and not variant.configured:
+        return jsonify({'message': 'This variant is not available for purchase yet. '
+                                   'Please contact us for pricing.'}), 400
+    if variant is None and product.coming_soon:
+        return jsonify({'message': 'This product is coming soon and cannot be ordered yet.'}), 400
+
+    subtotal, delivery, total = calc_total(unit_price, has_front, has_back, total_qty)
 
     item = CartItem(
         user_id=user_id,
@@ -51,7 +75,7 @@ def add_to_cart():
         back_design=data.get('back_design'),
         front_dimensions=data.get('front_dimensions'),
         back_dimensions=data.get('back_dimensions'),
-        base_price=float(product.base_price),
+        base_price=unit_price,
         front_print_cost=FRONT_PRINT if has_front else 0,
         back_print_cost=BACK_PRINT if has_back else 0,
         delivery_cost=delivery,

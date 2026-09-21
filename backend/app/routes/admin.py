@@ -63,7 +63,32 @@ def get_customers():
 @admin_required
 def get_inventory():
     items = Inventory.query.all()
-    return jsonify([i.to_dict() for i in items])
+    result = []
+    for i in items:
+        d = i.to_dict()
+        d['product_name'] = i.product.name if i.product else None
+        d['product_type'] = i.product.type if i.product else None
+        if i.variant:
+            d['variant_name'] = i.variant.name
+            d['audience'] = i.variant.audience
+        result.append(d)
+    return jsonify(result)
+
+
+@admin_bp.route('/inventory', methods=['POST'])
+@admin_required
+def create_inventory_row():
+    data = request.get_json()
+    item = Inventory(
+        product_id=data['product_id'],
+        variant_id=data.get('variant_id'),
+        colour=data['colour'],
+        size=data['size'],
+        stock=data.get('stock', 0),
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify(item.to_dict()), 201
 
 
 @admin_bp.route('/inventory/<int:item_id>', methods=['PUT'])
