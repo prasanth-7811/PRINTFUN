@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+import bcrypt
 from ..extensions import db
 
 
@@ -18,16 +19,54 @@ class User(TimestampMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     avatar = db.Column(db.String(500))
 
+    # --- Authentication state -------------------------------------------------
+    email_verified = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    last_login = db.Column(db.DateTime)
+    # Bumped on every password change / logout-everywhere; tokens issued before
+    # the current value are treated as stale.
+    token_version = db.Column(db.Integer, default=1, nullable=False)
+
     orders = db.relationship('Order', backref='user', lazy='dynamic')
     cart_items = db.relationship('CartItem', backref='user', lazy='dynamic')
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy='dynamic')
     reviews = db.relationship('Review', backref='user', lazy='dynamic')
     notifications = db.relationship('Notification', backref='user', lazy='dynamic')
     addresses = db.relationship('Address', backref='user', lazy='dynamic')
+    auth_tokens = db.relationship('AuthToken', backref='user', lazy='dynamic',
+                                  cascade='all, delete-orphan')
+
+    # --- Password handling ----------------------------------------------------
+    @staticmethod
+    def hash_password(password: str) -> str:
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+
+    def set_password(self, password: str):
+        self.password_hash = self.hash_password(password)
+        # Invalidate all previously issued tokens.
+        self.token_version = (self.token_version or 0) + 1
+
+    def check_password(self, password: str) -> bool:
+        if not self.password_hash:
+            return False
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'),
+                                 self.password_hash.encode('utf-8'))
+        except (ValueError, TypeError):
+            # Legacy werkzeug PBKDF2 hashes fall back gracefully.
+            return self._check_legacy_password(password)
+
+    def _check_legacy_password(self, password: str) -> bool:
+        try:
+            from werkzeug.security import check_password_hash
+            return check_password_hash(self.password_hash, password)
+        except Exception:
+            return False
 
     def to_dict(self):
         return {'id': self.id, 'name': self.name, 'email': self.email,
-                'phone': self.phone, 'role': self.role, 'avatar': self.avatar}
+                'phone': self.phone, 'role': self.role, 'avatar': self.avatar,
+                'email_verified': self.email_verified,
+                'last_login': self.last_login.isoformat() if self.last_login else None}
 
 
 class Product(TimestampMixin, db.Model):
@@ -383,3 +422,52 @@ class Setting(db.Model):
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text)
     type = db.Column(db.String(20), default='string')
+
+
+class AuthToken(db.Model):
+    """Secure, single-use, time-limited tokens for email verification and
+    password reset.
+
+    Only a hash of the token is stored, so a database leak never exposes
+    usable tokens. ``used_at`` marks single-use consumption.
+    """
+    __tablename__ = 'auth_tokens'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    purpose = db.Column(db.String(20), nullable=False, index=True)  # verify_email | reset_password
+    token_hash = db.Column(db.String(256), unique=True, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    used_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    VERIFICATION_TTL = timedelta(hours=24)
+    RESET_TTL = timedelta(hours=1)
+
+    @staticmethod
+    def generate():
+        """Return (raw_token, hash) — only the hash is persisted."""
+        import secrets
+        raw = secrets.token_urlsafe(32)
+        return raw, bcrypt.hashpw(raw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    @staticmethod
+    def hash_token(raw: str) -> str:
+        return bcrypt.hashpw(raw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def verify(self, raw: str) -> bool:
+        return bcrypt.checkpw(raw.encode('utf-8'), self.token_hash.encode('utf-8'))
+
+    @property
+    def is_expired(self) -> bool:
+        return datetime.utcnow() >= self.expires_at
+
+    @property
+    def is_used(self) -> bool:
+        return self.used_at is not None
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'user_id': self.user_id, 'purpose': self.purpose,
+            'expires_at': self.expires_at.isoformat(), 'used_at':
+                self.used_at.isoformat() if self.used_at else None,
+        }

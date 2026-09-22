@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { User, Package, Heart, Bookmark, MapPin, Bell, Lock, LogOut } from 'lucide-react'
+import { User, Package, Heart, Bookmark, MapPin, Bell, Lock, LogOut, BadgeCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { authService } from '../services/auth'
+import { PasswordField } from '../components/auth/AuthFields'
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -14,10 +16,43 @@ const TABS = [
 ]
 
 export default function AccountPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, isVerified, updateProfile } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '' })
   const [saved, setSaved] = useState(false)
+  const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
+  const [pwError, setPwError] = useState('')
+  const [pwOk, setPwOk] = useState(false)
+  const [pwLoading, setPwLoading] = useState(false)
+
+  const handleSave = async () => {
+    setSaved(false)
+    try {
+      await updateProfile({ name: form.name, phone: form.phone })
+      setSaved(true)
+    } catch {
+      setSaved(false)
+    }
+  }
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPwError('')
+    setPwOk(false)
+    if (pw.next.length < 8) { setPwError('New password must be at least 8 characters.'); return }
+    if (pw.next !== pw.confirm) { setPwError('New passwords do not match.'); return }
+
+    setPwLoading(true)
+    try {
+      await authService.changePassword(pw.current, pw.next)
+      setPwOk(true)
+      setPw({ current: '', next: '', confirm: '' })
+    } catch (err: any) {
+      setPwError(err?.response?.data?.message || 'Could not update password.')
+    } finally {
+      setPwLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -32,10 +67,27 @@ export default function AccountPage() {
                   {user?.name?.[0]?.toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-semibold text-sm text-zinc-900 truncate">{user?.name}</p>
+                  <div className="flex items-center gap-1">
+                    <p className="font-semibold text-sm text-zinc-900 truncate">{user?.name}</p>
+                    {isVerified ? (
+                      <BadgeCheck size={13} className="text-blue-500 shrink-0" />
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                        Unverified
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-zinc-400 truncate">{user?.email}</p>
                 </div>
               </div>
+              {!isVerified && (
+                <Link
+                  to="/verify-email"
+                  className="block mb-2 mx-1 text-center text-xs font-medium text-blue-600 bg-blue-50 py-2 rounded-lg hover:bg-blue-100"
+                >
+                  Verify your email →
+                </Link>
+              )}
               <nav className="space-y-1">
                 {TABS.map(({ id, label, icon: Icon }) => (
                   <button key={id} onClick={() => setActiveTab(id)}
@@ -57,19 +109,26 @@ export default function AccountPage() {
               <div className="bg-white rounded-2xl border border-zinc-100 p-6">
                 <h2 className="font-bold text-lg text-zinc-900 mb-6">Profile Information</h2>
                 <div className="space-y-4 max-w-md">
-                  {[
-                    { label: 'Full Name', key: 'name', type: 'text' },
-                    { label: 'Email', key: 'email', type: 'email' },
-                    { label: 'Phone', key: 'phone', type: 'tel' },
-                  ].map(f => (
-                    <div key={f.key}>
-                      <label className="text-sm font-medium text-zinc-700 mb-1.5 block">{f.label}</label>
-                      <input type={f.type} value={form[f.key as keyof typeof form]}
-                        onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                    </div>
-                  ))}
-                  <button onClick={() => setSaved(true)} className="bg-black text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors">
+                  <div>
+                    <label className="text-sm font-medium text-zinc-700 mb-1.5 block">Full Name</label>
+                    <input type="text" value={form.name}
+                      onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-zinc-700 mb-1.5 block">Email</label>
+                    <input type="email" value={form.email} disabled
+                      onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm bg-zinc-50 text-zinc-500 cursor-not-allowed" />
+                    <p className="text-xs text-zinc-400 mt-1">Email address cannot be changed.</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-zinc-700 mb-1.5 block">Phone</label>
+                    <input type="tel" value={form.phone}
+                      onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+                  </div>
+                  <button onClick={handleSave} className="bg-black text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors">
                     Save Changes
                   </button>
                   {saved && <p className="text-sm text-green-600 font-medium">✓ Profile updated</p>}
@@ -129,15 +188,46 @@ export default function AccountPage() {
             {activeTab === 'password' && (
               <div className="bg-white rounded-2xl border border-zinc-100 p-6">
                 <h2 className="font-bold text-lg text-zinc-900 mb-6">Change Password</h2>
-                <div className="space-y-4 max-w-md">
-                  {['Current Password', 'New Password', 'Confirm New Password'].map(label => (
-                    <div key={label}>
-                      <label className="text-sm font-medium text-zinc-700 mb-1.5 block">{label}</label>
-                      <input type="password" className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" placeholder="••••••••" />
+                <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                  {pwError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                      {pwError}
                     </div>
-                  ))}
-                  <button className="bg-black text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors">Update Password</button>
-                </div>
+                  )}
+                  {pwOk && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
+                      ✓ Password updated. All other sessions were signed out.
+                    </div>
+                  )}
+                  <PasswordField
+                    label="Current Password"
+                    value={pw.current}
+                    onChange={(v) => setPw(p => ({ ...p, current: v }))}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                  />
+                  <PasswordField
+                    label="New Password"
+                    value={pw.next}
+                    onChange={(v) => setPw(p => ({ ...p, next: v }))}
+                    placeholder="Min. 8 characters"
+                    autoComplete="new-password"
+                  />
+                  <PasswordField
+                    label="Confirm New Password"
+                    value={pw.confirm}
+                    onChange={(v) => setPw(p => ({ ...p, confirm: v }))}
+                    placeholder="Repeat new password"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="submit"
+                    disabled={pwLoading || !pw.current || !pw.next || !pw.confirm}
+                    className="bg-black text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {pwLoading ? 'Updating...' : 'Update Password'}
+                  </button>
+                </form>
               </div>
             )}
           </div>

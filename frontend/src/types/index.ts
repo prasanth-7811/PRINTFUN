@@ -5,6 +5,8 @@ export interface User {
   phone?: string
   role: 'customer' | 'admin' | 'manager' | 'production' | 'shipping'
   avatar?: string
+  email_verified: boolean
+  last_login?: string | null
 }
 
 export interface Product {

@@ -7,7 +7,7 @@ unconfigured until an admin sets sizes & pricing.
 from app import create_app
 from app.extensions import db
 from app.models import (User, Product, ProductVariant, Inventory, Design,
-                        Coupon, Review)
+                        Coupon, Review, AuthToken)
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 from sqlalchemy import inspect, text
@@ -16,7 +16,7 @@ app = create_app()
 
 
 def migrate_schema():
-    """Add catalog columns/tables introduced by the variant update.
+    """Add catalog columns/tables introduced by later updates.
 
     Idempotent: only alters objects that are missing, so it is safe to run on
     both fresh and pre-existing databases.
@@ -26,6 +26,11 @@ def migrate_schema():
 
     # Add new columns to existing tables.
     column_additions = {
+        'users': [
+            ('email_verified', 'BOOLEAN'),
+            ('last_login', 'DATETIME'),
+            ('token_version', 'INTEGER'),
+        ],
         'products': [
             ('audiences', 'JSON'),
             ('gsm', 'INTEGER'),
@@ -44,6 +49,13 @@ def migrate_schema():
             if name not in present:
                 db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {ddl}'))
                 db.session.commit()
+
+    # users created before email verification shipped must stay able to log in.
+    if 'users' in existing_tables:
+        db.session.execute(text(
+            "UPDATE users SET email_verified = 1, token_version = 1 "
+            "WHERE email_verified IS NULL"))
+        db.session.commit()
 
     # The old inventory unique constraint was (product_id, colour, size); it must
     # now include variant_id, otherwise two variants of the same garment cannot
@@ -274,14 +286,15 @@ with app.app_context():
     # Admin user
     if not User.query.filter_by(email='admin@teezo.com').first():
         admin = User(name='Admin', email='admin@teezo.com',
-                     password_hash=generate_password_hash('admin123'), role='admin')
+                     password_hash=User.hash_password('admin123'), role='admin',
+                     email_verified=True)
         db.session.add(admin)
 
-    # Demo customer
+    # Demo customer (pre-verified so the storefront is usable out of the box)
     if not User.query.filter_by(email='demo@teezo.com').first():
         customer = User(name='Rahul Sharma', email='demo@teezo.com',
-                        password_hash=generate_password_hash('demo123'), role='customer',
-                        phone='9876543210')
+                        password_hash=User.hash_password('demo123'), role='customer',
+                        phone='9876543210', email_verified=True)
         db.session.add(customer)
 
     # Products + variants + inventory

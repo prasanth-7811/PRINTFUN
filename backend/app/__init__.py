@@ -1,6 +1,6 @@
 import os
 from flask import Flask, jsonify
-from .extensions import db, jwt, migrate, cors
+from .extensions import db, jwt, migrate, cors, limiter
 from .config.settings import config
 
 
@@ -15,6 +15,10 @@ def create_app(config_name=None):
     jwt.init_app(app)
     migrate.init_app(app, db)
     cors.init_app(app, resources={r'/api/*': {'origins': '*'}})
+    # Rate limiting guards every auth endpoint against brute-force attempts.
+    limiter.storage_uri = app.config.get('RATELIMIT_STORAGE_URI', 'memory://')
+    limiter.enabled = bool(app.config.get('RATELIMIT_ENABLED', True))
+    limiter.init_app(app)
 
     from .routes.auth import auth_bp
     from .routes.products import products_bp

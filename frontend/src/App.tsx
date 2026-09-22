@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { CartProvider } from './contexts/CartContext'
 import MainLayout from './layouts/MainLayout'
 import AdminLayout from './layouts/AdminLayout'
@@ -17,6 +17,9 @@ import OrdersPage from './pages/OrdersPage'
 import OrderDetailPage from './pages/OrderDetailPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import AccountPage from './pages/AccountPage'
 
 import AdminLoginPage from './pages/admin/AdminLoginPage'
@@ -33,7 +36,16 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, sta
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
-  return token ? <>{children}</> : <Navigate to="/login" replace />
+  return token ? <>{children}</> : <Navigate to="/login?redirect=/account" replace />
+}
+
+/** Requires a real, verified session — not just a token in storage. */
+function VerifiedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isVerified, loading } = useAuth()
+  if (loading) return null
+  if (!isAuthenticated) return <Navigate to="/login?redirect=/checkout" replace />
+  if (!isVerified) return <Navigate to="/verify-email" replace />
+  return <>{children}</>
 }
 
 export default function App() {
@@ -41,11 +53,14 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <CartProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/admin/login" element={<AdminLoginPage />} />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
 
               <Route element={<MainLayout />}>
                 <Route path="/" element={<HomePage />} />
@@ -54,7 +69,7 @@ export default function App() {
                 <Route path="/design-library" element={<DesignLibraryPage />} />
                 <Route path="/design-studio" element={<DesignStudioPage />} />
                 <Route path="/cart" element={<CartPage />} />
-                <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+                <Route path="/checkout" element={<VerifiedRoute><CheckoutPage /></VerifiedRoute>} />
                 <Route path="/order-success/:id" element={<ProtectedRoute><OrderSuccessPage /></ProtectedRoute>} />
                 <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
                 <Route path="/orders/:id" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />

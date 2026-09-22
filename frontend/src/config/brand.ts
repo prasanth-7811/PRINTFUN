@@ -1,4 +1,6 @@
-// Brand configuration — change brand name here only
+// Brand configuration — change brand name here only.
+// Every value here is consumed by mail templates, the footer, the navbar and
+// the email footer, so keep it as the single source of truth.
 export const BRAND = {
   name: 'TEEZO',
   tagline: 'Design It. Wear It. Make It Yours.',
@@ -26,4 +28,11 @@ export const PRICING = {
   deliveryBase: 79,
   deliveryPerExtra: 20,
   freeDeliveryAbove: 999,
+}
+
+// Sender identity used by the backend's email templates. Mirrors the
+// MAIL_FROM / SUPPORT_EMAIL env vars — keep both in sync when rebranding.
+export const MAIL = {
+  from: `${BRAND.name} <noreply@${BRAND.name.toLowerCase()}.com>`,
+  support: BRAND.email,
 }

@@ -1,66 +1,154 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { BRAND } from '../config/brand'
+import { AuthLayout, FormField, PasswordField, PasswordStrength, SubmitButton } from '../components/auth/AuthFields'
+import type { AuthErrorResponse } from '../services/auth'
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '' })
-  const [error, setError] = useState('')
+  const [form, setForm] = useState({
+    name: '', email: '', phone: '', password: '', confirm: '',
+  })
+  const [acceptTerms, setAcceptTerms] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [serverError, setServerError] = useState('')
   const { register, loading } = useAuth()
   const navigate = useNavigate()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (form.password !== form.confirm) { setError('Passwords do not match.'); return }
-    if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return }
+  const set = (k: keyof typeof form) => (v: string) => {
+    setForm((f) => ({ ...f, [k]: v }))
+    if (errors[k]) setErrors((e) => ({ ...e, [k]: '' }))
+  }
+
+  const validate = () => {
+    const e: Record<string, string> = {}
+    if (!form.name.trim() || form.name.trim().length < 2) e.name = 'Enter your full name.'
+    if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(form.email))
+      e.email = 'Enter a valid email address.'
+    if (form.phone && !/^[0-9+()\-\s]{7,20}$/.test(form.phone))
+      e.phone = 'Enter a valid mobile number.'
+    if (form.password.length < 8) e.password = 'Password must be at least 8 characters.'
+    else if (form.password !== form.confirm) e.confirm = 'Passwords do not match.'
+    if (!acceptTerms) e.terms = 'You must accept the Terms & Conditions.'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault()
+    setServerError('')
+    if (!validate()) return
+
     try {
-      await register({ name: form.name, email: form.email, phone: form.phone, password: form.password })
-      navigate('/')
+      await register({
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        password: form.password,
+        confirm_password: form.confirm,
+        accept_terms: acceptTerms,
+      })
+      // Account created unverified — send the user to verify their email.
+      navigate(`/verify-email?email=${encodeURIComponent(form.email.toLowerCase())}`)
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Registration failed. Please try again.')
+      const body = err?.response?.data as AuthErrorResponse | undefined
+      setServerError(body?.message || 'Registration failed. Please try again.')
+      if (body?.errors) setErrors({ ...errors, ...body.errors })
     }
   }
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
-
   return (
-    <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link to="/" className="font-black text-3xl tracking-tighter text-black">{BRAND.name}</Link>
-          <p className="text-zinc-500 text-sm mt-2">Create your account</p>
+    <AuthLayout
+      title="Create Your Account"
+      subtitle="Join TEEZO and start designing"
+      footer={
+        <p className="text-sm text-zinc-500">
+          Already have an account?{' '}
+          <Link to="/login" className="text-black font-semibold hover:underline">
+            Sign in
+          </Link>
+        </p>
+      }
+    >
+      {serverError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+          {serverError}
         </div>
-        <div className="bg-white rounded-2xl border border-zinc-100 p-8 shadow-sm">
-          <h1 className="text-2xl font-black text-zinc-900 mb-6">Get Started</h1>
-          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {[
-              { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Rahul Sharma' },
-              { label: 'Email', key: 'email', type: 'email', placeholder: 'you@example.com' },
-              { label: 'Phone (optional)', key: 'phone', type: 'tel', placeholder: '+91 98765 43210' },
-              { label: 'Password', key: 'password', type: 'password', placeholder: 'Min. 8 characters' },
-              { label: 'Confirm Password', key: 'confirm', type: 'password', placeholder: 'Repeat password' },
-            ].map(({ label, key, type, placeholder }) => (
-              <div key={key}>
-                <label className="text-sm font-medium text-zinc-700 mb-1.5 block">{label}</label>
-                <input type={type} value={form[key as keyof typeof form]} onChange={set(key as keyof typeof form)}
-                  required={key !== 'phone'}
-                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black"
-                  placeholder={placeholder} />
-              </div>
-            ))}
-            <button type="submit" disabled={loading}
-              className="w-full bg-black text-white py-3 rounded-xl font-semibold text-sm hover:bg-zinc-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-              {loading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Creating account...</> : 'Create Account'}
-            </button>
-          </form>
-          <p className="text-center text-sm text-zinc-500 mt-6">
-            Already have an account?{' '}
-            <Link to="/login" className="text-black font-semibold hover:underline">Sign in</Link>
-          </p>
+      )}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <FormField
+          id="name"
+          label="Full Name"
+          value={form.name}
+          onChange={set('name')}
+          placeholder="Rahul Sharma"
+          autoComplete="name"
+          error={errors.name}
+          required
+        />
+        <FormField
+          id="email"
+          label="Email Address"
+          type="email"
+          value={form.email}
+          onChange={set('email')}
+          placeholder="you@example.com"
+          autoComplete="email"
+          error={errors.email}
+          required
+        />
+        <FormField
+          id="phone"
+          label="Mobile Number"
+          type="tel"
+          value={form.phone}
+          onChange={set('phone')}
+          placeholder="+91 98765 43210"
+          autoComplete="tel"
+          error={errors.phone}
+        />
+        <div>
+          <PasswordField
+            id="password"
+            label="Password"
+            value={form.password}
+            onChange={set('password')}
+            autoComplete="new-password"
+            error={errors.password}
+          />
+          <PasswordStrength password={form.password} />
         </div>
-      </div>
-    </div>
+        <PasswordField
+          id="confirm"
+          label="Confirm Password"
+          value={form.confirm}
+          onChange={set('confirm')}
+          placeholder="Repeat password"
+          autoComplete="new-password"
+          error={errors.confirm}
+        />
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={acceptTerms}
+            onChange={(e) => setAcceptTerms(e.target.checked)}
+            className="mt-1 rounded border-zinc-300 text-black focus:ring-black"
+          />
+          <span className="text-sm text-zinc-600">
+            I accept the{' '}
+            <Link to="/terms" className="text-black font-medium hover:underline">
+              Terms & Conditions
+            </Link>{' '}
+            and{' '}
+            <Link to="/privacy" className="text-black font-medium hover:underline">
+              Privacy Policy
+            </Link>
+          </span>
+        </label>
+        {errors.terms && <p className="text-xs text-red-500 -mt-2">{errors.terms}</p>}
+
+        <SubmitButton loading={loading}>Create Account</SubmitButton>
+      </form>
+    </AuthLayout>
   )
 }

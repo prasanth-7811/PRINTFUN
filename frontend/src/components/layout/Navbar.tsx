@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown } from 'lucide-react'
+import { Search, Heart, User, ShoppingBag, Menu, X, ChevronDown, BadgeCheck } from 'lucide-react'
 import { BRAND } from '../../config/brand'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCart } from '../../contexts/CartContext'
@@ -20,7 +20,7 @@ export default function Navbar() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [accountOpen, setAccountOpen] = useState(false)
-  const { user, logout, isAuthenticated, isAdmin } = useAuth()
+  const { user, logout, isAuthenticated, isVerified, isAdmin } = useAuth()
   const { count } = useCart()
   const location = useLocation()
   const navigate = useNavigate()
@@ -96,8 +96,29 @@ export default function Navbar() {
                     {isAuthenticated ? (
                       <>
                         <div className="px-4 py-2 border-b border-zinc-100">
-                          <p className="text-sm font-semibold text-zinc-900">{user?.name}</p>
-                          <p className="text-xs text-zinc-400">{user?.email}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-semibold text-zinc-900 truncate">{user?.name}</p>
+                            {isVerified ? (
+                              <BadgeCheck size={13} className="text-blue-500 shrink-0" />
+                            ) : (
+                              <span
+                                title="Email not verified"
+                                className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0"
+                              >
+                                Unverified
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-zinc-400 truncate">{user?.email}</p>
+                          {!isVerified && (
+                            <Link
+                              to="/verify-email"
+                              className="text-[11px] text-blue-600 font-medium hover:underline mt-1 inline-block"
+                              onClick={() => setAccountOpen(false)}
+                            >
+                              Verify your email →
+                            </Link>
+                          )}
                         </div>
                         <Link to="/account" className="block px-4 py-2 text-sm hover:bg-zinc-50" onClick={() => setAccountOpen(false)}>My Account</Link>
                         <Link to="/orders" className="block px-4 py-2 text-sm hover:bg-zinc-50" onClick={() => setAccountOpen(false)}>My Orders</Link>
