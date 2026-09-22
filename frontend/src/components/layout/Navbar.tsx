@@ -44,7 +44,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm' : 'bg-white'}`}>
+      <header className={`fixed top-0 left-0 right-0 ${accountOpen ? 'z-50' : 'z-40'} transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm' : 'bg-white'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -216,7 +216,9 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* Overlay for account dropdown */}
+      {/* Overlay for account dropdown. Sits *under* the header (z-40 vs the
+          header's z-50 while open) so it only catches outside clicks and
+          never covers the Login / Create Account links it is meant to reveal. */}
       {accountOpen && <div className="fixed inset-0 z-40" onClick={() => setAccountOpen(false)} />}
     </>
   )
