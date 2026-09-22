@@ -21,6 +21,7 @@ class User(TimestampMixin, db.Model):
 
     # --- Authentication state -------------------------------------------------
     email_verified = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    phone_verified = db.Column(db.Boolean, default=False, nullable=False, index=True)
     last_login = db.Column(db.DateTime)
     # Bumped on every password change / logout-everywhere; tokens issued before
     # the current value are treated as stale.
@@ -66,6 +67,7 @@ class User(TimestampMixin, db.Model):
         return {'id': self.id, 'name': self.name, 'email': self.email,
                 'phone': self.phone, 'role': self.role, 'avatar': self.avatar,
                 'email_verified': self.email_verified,
+                'phone_verified': self.phone_verified,
                 'last_login': self.last_login.isoformat() if self.last_login else None}
 
 
@@ -430,6 +432,9 @@ class AuthToken(db.Model):
 
     Only a hash of the token is stored, so a database leak never exposes
     usable tokens. ``used_at`` marks single-use consumption.
+
+    The ``phone_otp_*`` columns carry the phone-verification side-channel: a
+    short-lived numeric code plus its own attempt counter.
     """
     __tablename__ = 'auth_tokens'
     id = db.Column(db.Integer, primary_key=True)
@@ -439,6 +444,14 @@ class AuthToken(db.Model):
     expires_at = db.Column(db.DateTime, nullable=False, index=True)
     used_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # --- Phone OTP (secondary channel) --------------------------------------
+    phone = db.Column(db.String(20), index=True)
+    phone_otp_hash = db.Column(db.String(256))
+    phone_otp_attempts = db.Column(db.Integer, default=0, nullable=False)
+    phone_otp_last_sent_at = db.Column(db.DateTime)
+    last_otp_at = db.Column(db.DateTime)
+    otp_attempts = db.Column(db.Integer, default=0, nullable=False)
 
     VERIFICATION_TTL = timedelta(hours=24)
     RESET_TTL = timedelta(hours=1)

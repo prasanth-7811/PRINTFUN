@@ -175,20 +175,24 @@ export function PasswordStrength({ password }: { password: string }) {
 }
 
 /**
- * Loading-aware submit button.
+ * Loading-aware submit button. ``onClick`` is optional so it can also stand in
+ * for a submit outside a <form> (the OTP boxes, for example).
  */
 export function SubmitButton({
   loading,
   children,
   disabled,
+  onClick,
 }: {
   loading: boolean
   children: ReactNode
   disabled?: boolean
+  onClick?: () => void
 }) {
   return (
     <button
-      type="submit"
+      type={onClick ? 'button' : 'submit'}
+      onClick={onClick}
       disabled={loading || disabled}
       className="w-full bg-black text-white py-3 rounded-xl font-semibold text-sm hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
     >
@@ -206,8 +210,11 @@ export function SubmitButton({
 
 /**
  * Resend countdown — enforces the backend cooldown client-side too.
+ *
+ * ``active`` arms the timer and ``key`` restarts it, so a resend before the
+ * countdown lapses still waits out the server-side cooldown.
  */
-export function useCountdown(seconds: number, active: boolean) {
+export function useCountdown(seconds: number, active: boolean, key: number | string = 0) {
   const [remaining, setRemaining] = useState(active ? seconds : 0)
 
   useEffect(() => {
@@ -223,9 +230,9 @@ export function useCountdown(seconds: number, active: boolean) {
       })
     }, 1000)
     return () => clearInterval(id)
-    // Only restart when the countdown is re-armed.
+    // Re-arm whenever the countdown is armed or its key changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active])
+  }, [active, key])
 
   return remaining
 }

@@ -23,10 +23,20 @@ class Config:
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
     MAIL_FROM = os.environ.get('MAIL_FROM', 'TEEZO <noreply@teezo.com>')
     SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'hello@teezo.com')
-    # Enable to return the verification link in the API response alongside the
-    # email — strictly for local development.
+    # Enable to return the verification link / OTP in the API response
+    # alongside the real delivery — strictly for local development.
     DEV_RETURN_TOKEN = os.environ.get('DEV_RETURN_TOKEN', '').lower() in ('1', 'true')
 
+    # --- Phone (SMS) ---------------------------------------------------------
+    # Pick ONE provider. With none set, the code is printed to stdout and the
+    # flow still works locally.
+    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+    TWILIO_FROM = os.environ.get('TWILIO_FROM')
+    MSG91_AUTH_KEY = os.environ.get('MSG91_AUTH_KEY')
+    MSG91_SENDER_ID = os.environ.get('MSG91_SENDER_ID', 'TEEZO')
+    MSG91_OTP_TEMPLATE_ID = os.environ.get('MSG91_OTP_TEMPLATE_ID')
+    SMS_FROM = os.environ.get('SMS_FROM', 'TEEZO')
     # Rate limiting (flask-limiter). Backed by an in-memory store locally;
     # set REDIS_URL in production so limits are shared across workers.
     RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', 'true').lower() not in ('0', 'false')

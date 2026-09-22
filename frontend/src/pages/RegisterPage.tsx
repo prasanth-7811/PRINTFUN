@@ -25,7 +25,8 @@ export default function RegisterPage() {
     if (!form.name.trim() || form.name.trim().length < 2) e.name = 'Enter your full name.'
     if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(form.email))
       e.email = 'Enter a valid email address.'
-    if (form.phone && !/^[0-9+()\-\s]{7,20}$/.test(form.phone))
+    if (!form.phone.trim()) e.phone = 'Enter your mobile number.'
+    else if (!/^[0-9+()\-\s]{7,20}$/.test(form.phone))
       e.phone = 'Enter a valid mobile number.'
     if (form.password.length < 8) e.password = 'Password must be at least 8 characters.'
     else if (form.password !== form.confirm) e.confirm = 'Passwords do not match.'
@@ -48,8 +49,8 @@ export default function RegisterPage() {
         confirm_password: form.confirm,
         accept_terms: acceptTerms,
       })
-      // Account created unverified — send the user to verify their email.
-      navigate(`/verify-email?email=${encodeURIComponent(form.email.toLowerCase())}`)
+      // Account created unverified — verify the email first, then the phone.
+      navigate(`/verify-email?email=${encodeURIComponent(form.email.toLowerCase())}&next=verify-phone`)
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       setServerError(body?.message || 'Registration failed. Please try again.')

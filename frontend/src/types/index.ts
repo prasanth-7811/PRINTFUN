@@ -6,6 +6,7 @@ export interface User {
   role: 'customer' | 'admin' | 'manager' | 'production' | 'shipping'
   avatar?: string
   email_verified: boolean
+  phone_verified?: boolean
   last_login?: string | null
 }
 

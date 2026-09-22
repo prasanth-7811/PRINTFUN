@@ -21,6 +21,7 @@ export default function VerifyEmailPage() {
   const navigate = useNavigate()
   const token = searchParams.get('token') || ''
   const email = searchParams.get('email') || ''
+  const next = searchParams.get('next') || ''
 
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [manualToken, setManualToken] = useState('')
@@ -36,7 +37,8 @@ export default function VerifyEmailPage() {
       // The backend returns a session token so the user is signed in already.
       localStorage.setItem('token', res.token)
       localStorage.setItem('user', JSON.stringify(res.user))
-      setTimeout(() => navigate('/'), 2200)
+      // Registration hands off here when a phone number still needs verifying.
+      setTimeout(() => navigate(next ? `/${next.replace(/^\//, '')}` : '/'), 2200)
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       setState({
@@ -88,8 +90,10 @@ export default function VerifyEmailPage() {
           </div>
           <h2 className="text-xl font-black text-zinc-900 mb-2">EMAIL VERIFIED SUCCESSFULLY</h2>
           <p className="text-sm text-zinc-500 leading-relaxed mb-6">
-            Your TEEZO account is now active.<br />
-            You can log in and start shopping.
+            Your email is now confirmed.<br />
+            {next
+              ? 'Taking you to phone verification next…'
+              : 'You can log in and start shopping.'}
           </p>
           <button
             onClick={() => navigate('/')}

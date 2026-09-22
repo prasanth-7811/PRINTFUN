@@ -30,6 +30,15 @@ def migrate_schema():
             ('email_verified', 'BOOLEAN'),
             ('last_login', 'DATETIME'),
             ('token_version', 'INTEGER'),
+            ('phone_verified', 'BOOLEAN'),
+        ],
+        'auth_tokens': [
+            ('phone', 'VARCHAR(20)'),
+            ('phone_otp_hash', 'VARCHAR(256)'),
+            ('phone_otp_attempts', 'INTEGER'),
+            ('phone_otp_last_sent_at', 'DATETIME'),
+            ('last_otp_at', 'DATETIME'),
+            ('otp_attempts', 'INTEGER'),
         ],
         'products': [
             ('audiences', 'JSON'),
@@ -55,6 +64,12 @@ def migrate_schema():
         db.session.execute(text(
             "UPDATE users SET email_verified = 1, token_version = 1 "
             "WHERE email_verified IS NULL"))
+        db.session.execute(text(
+            "UPDATE users SET phone_verified = email_verified "
+            "WHERE phone_verified IS NULL"))
+        db.session.execute(text(
+            "UPDATE auth_tokens SET phone_otp_attempts = 0, otp_attempts = 0 "
+            "WHERE phone_otp_attempts IS NULL AND otp_attempts IS NULL"))
         db.session.commit()
 
     # The old inventory unique constraint was (product_id, colour, size); it must

@@ -88,6 +88,14 @@ export default function AccountPage() {
                   Verify your email →
                 </Link>
               )}
+              {isVerified && !user?.phone_verified && (
+                <Link
+                  to="/verify-phone"
+                  className="block mb-2 mx-1 text-center text-xs font-medium text-blue-600 bg-blue-50 py-2 rounded-lg hover:bg-blue-100"
+                >
+                  Verify your mobile number →
+                </Link>
+              )}
               <nav className="space-y-1">
                 {TABS.map(({ id, label, icon: Icon }) => (
                   <button key={id} onClick={() => setActiveTab(id)}
