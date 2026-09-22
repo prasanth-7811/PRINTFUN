@@ -1,10 +1,18 @@
 import api from './api'
 import type { CartItem } from '../types'
 
+/**
+ * A missing /api/* is answered by the SPA fallback (a 200 carrying HTML), so
+ * never trust the shape of a response before handing it to .map().
+ */
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : []
+}
+
 export const cartService = {
   async getCart() {
     const res = await api.get('/cart')
-    return res.data as CartItem[]
+    return asArray<CartItem>(res.data)
   },
 
   async addToCart(data: {

@@ -1,6 +1,22 @@
 import api from './api'
 import type { Product, ProductVariant, PaginatedResponse, Audience } from '../types'
 
+/**
+ * The SPA rewrite serves index.html for any unmatched route, so a request to
+ * a missing /api/* comes back as a 200 with an HTML body. Coerce those to an
+ * empty result instead of letting a string reach .map().
+ */
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : []
+}
+
+function asPaginated<T>(value: unknown): PaginatedResponse<T> {
+  if (value && typeof value === 'object' && Array.isArray((value as any).items)) {
+    return value as PaginatedResponse<T>
+  }
+  return { items: [], total: 0, page: 1, per_page: 0, pages: 0 }
+}
+
 export interface ProductFilters {
   search?: string
   type?: string
@@ -16,7 +32,7 @@ export interface ProductFilters {
 export const productService = {
   async getProducts(params?: ProductFilters) {
     const res = await api.get('/products', { params })
-    return res.data as PaginatedResponse<Product>
+    return asPaginated<Product>(res.data)
   },
 
   async getProduct(id: number | string) {
@@ -26,16 +42,17 @@ export const productService = {
 
   async getFeatured() {
     const res = await api.get('/products/featured')
-    return res.data as Product[]
+    return asArray<Product>(res.data)
   },
 
   async getFilters() {
     const res = await api.get('/products/filters')
-    return res.data as {
-      types: string[]
-      gsm: number[]
-      colours: { name: string; hex: string }[]
-      audiences: Audience[]
+    const d = (res.data && typeof res.data === 'object') ? res.data : {}
+    return {
+      types: asArray<string>(d.types),
+      gsm: asArray<number>(d.gsm),
+      colours: asArray<{ name: string; hex: string }>(d.colours),
+      audiences: asArray<Audience>(d.audiences),
     }
   },
 
