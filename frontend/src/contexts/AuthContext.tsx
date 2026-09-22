@@ -30,10 +30,21 @@ const AuthContext = createContext<AuthContextType | null>(null)
 const TOKEN_KEY = 'token'
 const USER_KEY = 'user'
 
+/** Parse the persisted user, tolerating corrupted or non-JSON values. */
+function readUser(): User | null {
+  try {
+    const stored = localStorage.getItem(USER_KEY)
+    return stored ? JSON.parse(stored) as User : null
+  } catch {
+    localStorage.removeItem(USER_KEY)
+    return null
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem(USER_KEY)
-    return stored ? JSON.parse(stored) : null
+    // Malformed or hostile storage must never white-screen the app.
+    return readUser()
   })
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY))
   const [loading, setLoading] = useState(false)
