@@ -5,6 +5,9 @@ Flask-CORS==4.0.1
 Flask-Migrate==4.0.7
 Flask-Limiter==3.8.0
 bcrypt==4.2.0
+# psycopg2 is the Postgres driver for Supabase. psycopg2-binary is fine for
+# Linux/Mac; on Windows install the non-binary `psycopg2` build if you hit a
+# DLL error, or use the Supabase pooler URL as-is (it needs no extra drivers).
 psycopg2-binary==2.9.9
 gunicorn==22.0.0
 resend==2.4.0

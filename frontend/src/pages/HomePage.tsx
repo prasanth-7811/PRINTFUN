@@ -17,7 +17,7 @@ const FAQ_ITEMS = [
   { question: 'Can I upload my own design?', answer: 'Yes! You can upload PNG, JPG, or JPEG files up to 20MB. We recommend high-resolution files (300 DPI or above) for the best print quality.' },
   { question: 'What file formats are supported?', answer: 'We support PNG, JPG, and JPEG formats. PNG is recommended for designs with transparent backgrounds.' },
   { question: 'Can I print different designs on front and back?', answer: 'Absolutely. Our Design Studio lets you customize the front and back independently with different designs, sizes, and positions.' },
-  { question: 'Can I choose different sizes in one order?', answer: 'Yes! You can add multiple size-quantity combinations in a single order. For example: S×2, M×3, L×1 — all in one checkout.' },
+  { question: 'Can I choose different sizes in one order?', answer: 'Yes! You can add multiple size-quantity combinations in a single order. For example: M×2, L×3, XL×1 — all in one checkout.' },
   { question: 'How is printing price calculated?', answer: 'Printing cost is ₹149 per side. Front-only, back-only, or front+back options are available. The base T-shirt price is added separately.' },
   { question: 'How is delivery calculated?', answer: 'Delivery starts at ₹79 and is calculated based on your location and order quantity. Orders above ₹999 qualify for free delivery.' },
   { question: 'Can I change my design after ordering?', answer: 'Design changes are not possible after the design has been approved for printing. You can request changes during the design review stage.' },

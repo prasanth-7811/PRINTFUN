@@ -1,5 +1,6 @@
 import os
 from flask import Flask, jsonify
+from sqlalchemy import event
 from .extensions import db, jwt, migrate, cors, limiter
 from .config.settings import config
 
@@ -19,6 +20,14 @@ def create_app(config_name=None):
     limiter.storage_uri = app.config.get('RATELIMIT_STORAGE_URI', 'memory://')
     limiter.enabled = bool(app.config.get('RATELIMIT_ENABLED', True))
     limiter.init_app(app)
+
+    # Behind Supabase's PgBouncer pooler a connection is reused across
+    # unrelated requests, so session-level state (prepared statements, cursors,
+    # GUCs) must be cleared before it goes back. Registered once the engine
+    # exists; empty unless the URI is a pooled one.
+    for name, listener in (app.config.get('POOL_RESET_EVENTS') or {}).items():
+        with app.app_context():
+            event.listen(db.engine.pool, name, listener)
 
     from .routes.auth import auth_bp
     from .routes.phone import phone_bp

@@ -14,6 +14,13 @@ from sqlalchemy import inspect, text
 
 app = create_app()
 
+# The inventory rebuild below is a SQLite-shaped migration path and is invalid
+# against Postgres/Supabase (`DROP TABLE` inside a session, `AUTOINCREMENT`).
+# db.create_all() builds the correct schema on a fresh Supabase project, and
+# flask-migrate handles existing ones, so skip the legacy rebuild there. The
+# dialect is detected inside migrate_schema() where an app context exists —
+# db.engine cannot be touched at import time (no application context yet).
+
 
 def migrate_schema():
     """Add catalog columns/tables introduced by later updates.
@@ -23,6 +30,7 @@ def migrate_schema():
     """
     inspector = inspect(db.engine)
     existing_tables = set(inspector.get_table_names())
+    is_postgres = db.engine.dialect.name == 'postgresql'
 
     # Add new columns to existing tables.
     column_additions = {
@@ -62,7 +70,7 @@ def migrate_schema():
     # users created before email verification shipped must stay able to log in.
     if 'users' in existing_tables:
         db.session.execute(text(
-            "UPDATE users SET email_verified = 1, token_version = 1 "
+            "UPDATE users SET email_verified = TRUE, token_version = 1 "
             "WHERE email_verified IS NULL"))
         db.session.execute(text(
             "UPDATE users SET phone_verified = email_verified "
@@ -75,6 +83,9 @@ def migrate_schema():
     # The old inventory unique constraint was (product_id, colour, size); it must
     # now include variant_id, otherwise two variants of the same garment cannot
     # share a colour/size. SQLite cannot alter constraints in place, so rebuild.
+    if is_postgres:
+        return  # schema comes from db.create_all() / flask-migrate
+
     if 'inventory' in existing_tables:
         indexes = inspector.get_indexes('inventory')
         has_variant_unique = any(

@@ -22,6 +22,8 @@ import VerifyPhonePage from './pages/VerifyPhonePage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import AccountPage from './pages/AccountPage'
+import AboutPage from './pages/AboutPage'
+import ContactPage from './pages/ContactPage'
 
 import AdminLoginPage from './pages/admin/AdminLoginPage'
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -70,6 +72,8 @@ export default function App() {
                 <Route path="/product/:id" element={<ProductPage />} />
                 <Route path="/design-library" element={<DesignLibraryPage />} />
                 <Route path="/design-studio" element={<DesignStudioPage />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/contact" element={<ContactPage />} />
                 <Route path="/cart" element={<CartPage />} />
                 <Route path="/checkout" element={<VerifiedRoute><CheckoutPage /></VerifiedRoute>} />
                 <Route path="/order-success/:id" element={<ProtectedRoute><OrderSuccessPage /></ProtectedRoute>} />

@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..extensions import db
 from ..models import Order, OrderItem, OrderStatusHistory, CartItem, Notification
 from ..utils.auth import admin_required
+from ..utils.whatsapp import send_new_order_alert, send_order_confirmation
 
 orders_bp = Blueprint('orders', __name__)
 
@@ -30,8 +31,9 @@ def create_order():
     discount = 0
     total = subtotal + delivery - discount
 
+    order_number = generate_order_number()
     order = Order(
-        order_number=generate_order_number(),
+        order_number=order_number,
         user_id=user_id,
         status='placed',
         subtotal=subtotal,
@@ -46,7 +48,17 @@ def create_order():
     db.session.add(order)
     db.session.flush()
 
+    # Collected for the store-owner WhatsApp alert (built before the cart rows
+    # are deleted below, so the item data is still attached).
+    item_lines = []
+    total_qty = 0
     for ci in cart_items:
+        total_qty += sum(v for v in (ci.sizes or {}).values() if v > 0)
+        product_name = ci.product.name if ci.product else 'Custom Tee'
+        sizes_str = ', '.join(f'{k}×{v}' for k, v in (ci.sizes or {}).items() if v > 0)
+        colour = f' ({ci.colour})' if ci.colour else ''
+        item_lines.append(f'{product_name}{colour} — {sizes_str}' if sizes_str
+                          else f'{product_name}{colour}')
         item = OrderItem(
             order_id=order.id,
             product_id=ci.product_id,
@@ -78,6 +90,27 @@ def create_order():
     )
     db.session.add(notif)
     db.session.commit()
+
+    # Notify the store owner on WhatsApp (best-effort; never fails the order).
+    addr = data.get('address') if isinstance(data.get('address'), dict) else {}
+    customer_name = addr.get('full_name') or addr.get('name')
+    send_new_order_alert(
+        order_number,
+        total,
+        customer_name=customer_name,
+        customer_phone=addr.get('phone'),
+        item_count=total_qty,
+        item_lines=item_lines,
+    )
+    # Send the customer a WhatsApp order confirmation (best-effort).
+    send_order_confirmation(
+        addr.get('phone'),
+        order_number,
+        total,
+        customer_name=customer_name,
+        item_count=total_qty,
+        item_lines=item_lines,
+    )
 
     return jsonify(order.to_dict()), 201
 

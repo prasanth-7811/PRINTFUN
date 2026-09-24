@@ -12,7 +12,7 @@ A full-stack premium custom T-shirt e-commerce platform with an interactive Desi
 
 **Backend:** Python · Flask · SQLAlchemy · Flask-JWT-Extended · Flask-Migrate
 
-**Database:** PostgreSQL
+**Database:** PostgreSQL — Supabase (managed Postgres + connection pooler)
 
 **Storage:** Local (dev) · AWS S3 (production)
 
@@ -53,7 +53,8 @@ cd teezo
 cp .env.example backend/.env
 ```
 
-Edit `backend/.env` with your database credentials.
+Edit `backend/.env` and paste your Supabase connection string (see
+**Database — Supabase** below).
 
 ### 2. Backend Setup
 
@@ -65,7 +66,8 @@ venv\Scripts\activate        # Windows
 
 pip install -r requirements.txt
 
-# Setup database
+# Setup database — use the DIRECT connection for the first migration run
+# (DATABASE_URL_DIRECT in .env), then switch back to the pooled URL.
 flask db init
 flask db migrate -m "initial"
 flask db upgrade
@@ -323,6 +325,100 @@ or the process was not restarted after setting them.
   password-reset links resolve.
 - Set `REDIS_URL` in production so the OTP rate limits are shared across
   workers instead of being per-process.
+- **Database:** `DATABASE_URL` must be the Supabase **pooler** URL
+  (port `6543`, `?pgbouncer=true`) — see [Database — Supabase](#database--supabase).
+  A direct URL works but drops connections whenever a serverless instance
+  sleeps. Set `DATABASE_URL_DIRECT` too and use it only for the first
+  `flask db upgrade`.
+- On Vercel, add both `DATABASE_URL` and the rest of the env vars in the
+  project's **Settings → Environment Variables**; the pooler URL is what keeps
+  the serverless API alive across cold starts.
+
+---
+
+## Database — Supabase
+
+The app talks to one database, configured entirely through `DATABASE_URL`.
+Supabase gives you two connection modes for the same Postgres instance, and
+which one you use matters.
+
+| Mode | Port | Use it for |
+|------|------|------------|
+| **Pooler (transaction)** | `6543` | The default. App server, Vercel, Render, any short-lived or shared connection. |
+| **Session / direct** | `5432` | The first `flask db upgrade`, long-lived servers, CLI tools (`psql`). |
+
+### Get the connection string
+
+1. Create a project at [supabase.com](https://supabase.com) and wait for it to
+   finish provisioning.
+2. **Project Settings** (the cog) → **Database** → **Connection string** →
+   **URI**.
+3. Copy the **Session pooler** string for `DATABASE_URL_DIRECT`, and the
+   **Transaction pooler** string for `DATABASE_URL`. Both are under
+   *Connect via connection pooling*.
+4. Replace `[YOUR-PASSWORD]` with the database password you set at project
+   creation — the placeholder in the panel is not a real password.
+
+Your `backend/.env` should end up looking like this:
+
+```env
+# Default: transaction pooler. The ?pgbouncer=true param is required by the
+# pooler, and the postgresql+psycopg2 prefix pins the driver requirements.txt
+# installs. Keep both.
+DATABASE_URL=postgresql+psycopg2://postgres.abcdefghij:your-password@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+
+# Only for the first migration run and CLI tools.
+DATABASE_URL_DIRECT=postgresql+psycopg2://postgres.abcdefghij:your-password@aws-0-ap-south-1.pooler.supabase.com:5432/postgres
+```
+
+The `postgresql+psycopg2://` prefix is added for you if you paste a bare
+`postgresql://` URL, so either form works.
+
+> **Why the pooler?** A direct connection dies when a serverless function goes
+> to sleep, and Supabase closes idle connections after ~30s. The pooler hands
+> each request a warm connection. This app sets `pool_pre_ping=True`,
+> `pool_recycle=20`, and disables prepared statements automatically when
+> `pgbouncer=true` is present, so you don't need to tune anything by hand.
+
+### First-time setup against a fresh project
+
+```bash
+cd backend
+venv\Scripts\activate
+
+# 1. Point at the direct connection for schema work.
+#    In .env: temporarily comment DATABASE_URL and uncomment DATABASE_URL_DIRECT,
+#    or export it for this shell:
+$env:DATABASE_URL = $env:DATABASE_URL_DIRECT    # PowerShell
+# export DATABASE_URL="$DATABASE_URL_DIRECT"    # bash
+
+# 2. Create the schema and seed it.
+flask db init
+flask db migrate -m "initial"
+flask db upgrade
+python seed.py
+
+# 3. Restore the pooled URL for day-to-day running and restart.
+```
+
+If you already have a local SQLite database you're moving off, export the data
+and import it through Supabase's SQL editor instead of recreating it by hand.
+
+### Supabase specifics worth knowing
+
+- **IP restrictions / IPv4** — the pooler endpoint resolves over IPv6 by
+  default. If your host has no IPv6 route (some Windows and corporate networks
+  don't), toggle **Use IPv6** off, or add your outbound IP to the allowlist.
+- **Pausing** — a free-tier project pauses after a week of inactivity. The
+  first request then takes a few seconds while it resumes; `pool_pre_ping`
+  makes that a retry rather than a 500.
+- **Connection limits** — Supabase's free plan allows a small number of direct
+  connections. Use the pooler everywhere and you won't come close.
+- **`sslmode`** — Supabase requires TLS. It's negotiated automatically over the
+  pooler; don't append `sslmode=disable`.
+- **RLS is not used** — this app's security lives in the Flask API, not in
+  Postgres row-level security, so no policies are needed. Don't enable RLS
+  without writing policies, or every query returns nothing.
 
 ---
 

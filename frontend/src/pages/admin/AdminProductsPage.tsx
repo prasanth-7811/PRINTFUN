@@ -7,7 +7,7 @@ import { productService } from '../../services/products'
 import type { Product, ProductVariant, Audience } from '../../types'
 
 const CATEGORIES = ['Round Neck', 'Polo', 'Oversized', 'Hoodies']
-const ALL_SIZES = ['2XS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
+const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
 const COLOUR_CHOICES = [
   { name: 'Black', hex: '#1a1a1a' }, { name: 'White', hex: '#f5f5f5' },
   { name: 'Navy', hex: '#1e3a5f' }, { name: 'Maroon', hex: '#7f1d1d' },

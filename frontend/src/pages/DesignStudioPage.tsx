@@ -29,7 +29,7 @@ const FALLBACK_COLOURS = [
   { name: 'Yellow', hex: '#eab308' },
   { name: 'Purple', hex: '#7c3aed' },
 ]
-const FALLBACK_SIZES = ['S', 'M', 'L', 'XL', '2XL']
+const FALLBACK_SIZES = ['M', 'L', 'XL']
 const FALLBACK_PRICE = 599
 const FONTS = ['Inter', 'Georgia', 'Impact', 'Courier New', 'Arial Black']
 
