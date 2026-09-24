@@ -200,6 +200,7 @@ class CartItem(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
     colour = db.Column(db.String(50), nullable=False)
     colour_hex = db.Column(db.String(10))
     sizes = db.Column(db.JSON, nullable=False)
@@ -217,7 +218,8 @@ class CartItem(TimestampMixin, db.Model):
 
     def to_dict(self):
         return {
-            'id': self.id, 'product': self.product.to_dict() if self.product else None,
+            'id': self.id, 'variant_id': self.variant_id,
+            'product': self.product.to_dict() if self.product else None,
             'colour': self.colour, 'colour_hex': self.colour_hex, 'sizes': self.sizes,
             'front_design': self.front_design, 'back_design': self.back_design,
             'front_dimensions': self.front_dimensions, 'back_dimensions': self.back_dimensions,

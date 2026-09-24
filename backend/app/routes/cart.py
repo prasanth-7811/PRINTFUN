@@ -68,6 +68,7 @@ def add_to_cart():
     item = CartItem(
         user_id=user_id,
         product_id=product.id,
+        variant_id=variant.id if variant else None,
         colour=data['colour'],
         colour_hex=data.get('colour_hex', ''),
         sizes=sizes,

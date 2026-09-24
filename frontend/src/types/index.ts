@@ -124,6 +124,8 @@ export interface CustomizationState {
 
 export interface CartItem {
   id: number
+  /** the purchased variant, if the line was added for a specific one */
+  variant_id?: number | null
   product: Product
   colour: string
   colour_hex: string

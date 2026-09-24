@@ -188,19 +188,34 @@ export default function AdminProductsPage() {
                       onDelete={() => deleteVariantMutation.mutate(v.id)}
                     />
                   ))}
-                  <button
-                    onClick={() => createVariantMutation.mutate({
-                      productId: p.id,
-                      data: {
-                        name: `${p.name} — Kids`, slug: `${p.slug}-kids`,
-                        audience: 'kids', price: null, colours: [], sizes: [],
-                        fabric: p.fabric, gsm: p.gsm, is_active: true,
-                      },
-                    })}
-                    className="text-xs font-medium px-3 py-2 rounded-lg border border-dashed border-zinc-300 text-zinc-500 hover:border-black hover:text-black"
-                  >
-                    + Add Kids Variant
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => createVariantMutation.mutate({
+                        productId: p.id,
+                        data: {
+                          name: `${p.name} — Adults`, slug: `${p.slug}-adults-${Date.now()}`,
+                          audience: 'adults', price: null, colours: [], sizes: [],
+                          fabric: p.fabric, gsm: p.gsm, is_active: true,
+                        },
+                      })}
+                      className="text-xs font-medium px-3 py-2 rounded-lg border border-dashed border-zinc-300 text-zinc-500 hover:border-black hover:text-black"
+                    >
+                      + Add Adults Variant
+                    </button>
+                    <button
+                      onClick={() => createVariantMutation.mutate({
+                        productId: p.id,
+                        data: {
+                          name: `${p.name} — Kids`, slug: `${p.slug}-kids-${Date.now()}`,
+                          audience: 'kids', price: null, colours: [], sizes: [],
+                          fabric: p.fabric, gsm: p.gsm, is_active: true,
+                        },
+                      })}
+                      className="text-xs font-medium px-3 py-2 rounded-lg border border-dashed border-zinc-300 text-zinc-500 hover:border-black hover:text-black"
+                    >
+                      + Add Kids Variant
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -332,11 +347,14 @@ function VariantRow({
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
+  const [vAudience, setVAudience] = useState<Audience>(variant.audience)
   const [price, setPrice] = useState<string>(variant.price?.toString() ?? '')
   const [sizes, setSizes] = useState<string[]>(variant.sizes || [])
   const [chosenColours, setChosenColours] = useState<string[]>((variant.colours || []).map(c => c.name))
   const [fabric, setFabric] = useState(variant.fabric || '')
   const [gsm, setGsm] = useState<string>(variant.gsm?.toString() ?? '')
+  const [isActive, setIsActive] = useState(variant.is_active)
+  const [comingSoon, setComingSoon] = useState(variant.coming_soon)
 
   const toggleSize = (s: string) =>
     setSizes(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
@@ -345,11 +363,14 @@ function VariantRow({
 
   const save = () => {
     onUpdate({
+      audience: vAudience,
       price: price === '' ? null : Number(price),
       sizes,
       colours: COLOUR_CHOICES.filter(c => chosenColours.includes(c.name)),
       fabric: fabric || null,
       gsm: gsm === '' ? null : Number(gsm),
+      is_active: isActive,
+      coming_soon: comingSoon,
     })
     setEditing(false)
   }
@@ -371,9 +392,19 @@ function VariantRow({
             <span className="text-xs text-zinc-400">· {variant.colours.length} colours</span>
           </div>
         </div>
+        {variant.coming_soon && (
+          <span className="text-xs font-medium text-amber-600">Coming Soon</span>
+        )}
+        {!variant.is_active && (
+          <span className="text-xs font-medium text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">Disabled</span>
+        )}
         {!variant.configured && (
           <span className="text-xs font-medium text-amber-600">Unconfigured</span>
         )}
+        <button onClick={() => onUpdate({ is_active: !variant.is_active })}
+          className="text-xs font-medium px-2.5 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-50">
+          {variant.is_active ? 'Disable' : 'Enable'}
+        </button>
         <button onClick={() => setEditing(true)} className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900"><Edit2 size={13} /></button>
         <button onClick={onDelete} className="p-2 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Trash2 size={13} /></button>
       </div>
@@ -387,6 +418,18 @@ function VariantRow({
           {variant.name} <span className="text-xs font-normal text-zinc-400">({variant.audience})</span>
         </p>
         <button onClick={() => setEditing(false)} className="text-zinc-400 hover:text-zinc-700"><X size={16} /></button>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Audience</label>
+        <div className="flex gap-2">
+          {(['adults', 'kids'] as Audience[]).map(a => (
+            <button key={a} type="button" onClick={() => setVAudience(a)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${vAudience === a ? 'bg-black text-white border-black' : 'border-zinc-200 text-zinc-600'}`}>
+              {a === 'kids' ? 'Kids' : 'Adults'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -428,6 +471,17 @@ function VariantRow({
               style={{ background: c.hex }} />
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 pt-1">
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="rounded border-zinc-300 text-black" />
+          Active (visible in shop)
+        </label>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={comingSoon} onChange={e => setComingSoon(e.target.checked)} className="rounded border-zinc-300 text-black" />
+          Coming Soon
+        </label>
       </div>
 
       <div className="flex gap-2">

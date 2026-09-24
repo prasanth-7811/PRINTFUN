@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Heart, ShieldCheck, Truck, RotateCcw, Star } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
 import { CURRENCY } from '../config/brand'
 import { productService } from '../services/products'
+import { useCart } from '../contexts/CartContext'
+import { useAuth } from '../contexts/AuthContext'
 import type { Product, ProductVariant, Audience } from '../types'
 
 const MOCK_REVIEWS = [
@@ -21,12 +23,17 @@ export default function ProductPage() {
     enabled: !!id,
   })
 
+  const navigate = useNavigate()
+  const { addItem } = useCart()
+  const { isAuthenticated } = useAuth()
+
   const [activeImage, setActiveImage] = useState(0)
   const [audience, setAudience] = useState<Audience>('adults')
   const [variant, setVariant] = useState<ProductVariant | null>(null)
   const [selectedColour, setSelectedColour] = useState<string>('')
   const [sizeQty, setSizeQty] = useState<Record<string, number>>({})
   const [wishlisted, setWishlisted] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   // Reset selection whenever the product or audience changes.
   useEffect(() => {
@@ -74,6 +81,27 @@ export default function ProductPage() {
   const customizeLink = variant
     ? `/design-studio?product=${product.id}&variant=${variant.id}&colour=${encodeURIComponent(selectedColour)}&audience=${audience}`
     : `/design-studio?product=${product.id}&audience=${audience}`
+
+  // Add the plain (undesigned) product to the cart at the selected variant's
+  // price. "Customize" (above) is the design-first path; this is the quick add.
+  const handleAddToCart = async () => {
+    if (!variant || unconfigured || comingSoon || totalQty === 0) return
+    if (!isAuthenticated) { navigate(`/login?redirect=/product/${product.id}`); return }
+    const hex = variantColourObjects.find(c => c.name === selectedColour)?.hex || ''
+    setAdding(true)
+    try {
+      await addItem({
+        product_id: product.id,
+        variant_id: variant.id,
+        colour: selectedColour,
+        colour_hex: hex,
+        sizes: sizeQty,
+      })
+      navigate('/cart')
+    } catch {
+      setAdding(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -240,10 +268,11 @@ export default function ProductPage() {
                 Customize This {product.type === 'Hoodies' ? 'Hoodie' : 'T-Shirt'}
               </Link>
               <button
-                disabled={unconfigured || comingSoon || totalQty === 0}
+                onClick={handleAddToCart}
+                disabled={unconfigured || comingSoon || totalQty === 0 || adding}
                 className="flex-1 border-2 border-black text-black py-3.5 rounded-xl font-semibold text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {unconfigured ? 'Not Available' : 'Add to Cart'}
+                {unconfigured ? 'Not Available' : adding ? 'Adding…' : 'Add to Cart'}
               </button>
             </div>
 

@@ -57,6 +57,9 @@ def migrate_schema():
         'inventory': [
             ('variant_id', 'INTEGER'),
         ],
+        'cart_items': [
+            ('variant_id', 'INTEGER'),
+        ],
     }
     for table, columns in column_additions.items():
         if table not in existing_tables:

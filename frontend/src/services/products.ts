@@ -27,6 +27,8 @@ export interface ProductFilters {
   max_price?: number
   sort?: string
   include_inactive?: boolean
+  page?: number
+  per_page?: number
 }
 
 export const productService = {

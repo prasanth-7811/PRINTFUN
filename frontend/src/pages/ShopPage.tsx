@@ -31,9 +31,23 @@ export default function ShopPage() {
     queryFn: productService.getFilters,
   })
 
+  // Server-side filters that map 1:1 to the backend params (audience, price
+  // range, sort) and a large page so client-side refinement below is never
+  // truncated by pagination. Multi-select facets + free-text search that don't
+  // map to single-value params stay client-side.
+  const priceRange = selectedPrice !== null ? PRICE_RANGES[selectedPrice] : null
+  const serverParams = {
+    sort,
+    include_inactive: false,
+    per_page: 100,
+    audience: selectedAudience || undefined,
+    min_price: priceRange ? priceRange.min : undefined,
+    max_price: priceRange && priceRange.max !== Infinity ? priceRange.max : undefined,
+  }
+
   const { data, isLoading } = useQuery({
-    queryKey: ['products', { sort, include_inactive: false }],
-    queryFn: () => productService.getProducts({ sort, include_inactive: false }),
+    queryKey: ['products', serverParams],
+    queryFn: () => productService.getProducts(serverParams),
   })
 
   const products = data?.items ?? []
@@ -44,20 +58,17 @@ export default function ShopPage() {
   const toggleNum = (arr: number[], val: number, set: (v: number[]) => void) =>
     set(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
 
+  // Audience and price are applied server-side (see serverParams); refine the
+  // result here by the multi-select facets and free-text search.
   const filtered = useMemo(() => {
     return products.filter(p => {
       if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.type.toLowerCase().includes(search.toLowerCase())) return false
       if (selectedTypes.length && !selectedTypes.includes(p.type)) return false
-      if (selectedAudience && !(p.audiences || []).includes(selectedAudience)) return false
       if (selectedColours.length && !(p.colours || []).some(c => selectedColours.includes(c.name))) return false
       if (selectedGsm.length && !(p.gsm && selectedGsm.includes(p.gsm))) return false
-      if (selectedPrice !== null) {
-        const range = PRICE_RANGES[selectedPrice]
-        if (p.base_price < range.min || p.base_price > range.max) return false
-      }
       return true
     })
-  }, [products, search, selectedTypes, selectedAudience, selectedColours, selectedGsm, selectedPrice])
+  }, [products, search, selectedTypes, selectedColours, selectedGsm])
 
   const clearFilters = () => {
     setSelectedTypes([]); setSelectedAudience(''); setSelectedColours([])
