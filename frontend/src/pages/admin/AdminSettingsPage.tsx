@@ -18,9 +18,9 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState({
     store_name: 'Teezo',
     store_email: 'hello@teezo.com',
-    store_phone: '6369794482',
+    store_phone: '9600650612',
     store_address: 'Chennai, Tamil Nadu, India',
-    whatsapp_number: '6369794482',
+    whatsapp_number: '9600650612',
     instagram_url: 'https://instagram.com/teezo',
     facebook_url: 'https://facebook.com/teezo',
     youtube_url: 'https://youtube.com/@teezo',

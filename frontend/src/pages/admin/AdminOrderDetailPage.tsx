@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Truck, CheckCircle, Clock, Package, X } from 'lucide-react'
+import { ArrowLeft, Truck, CheckCircle, Clock, Package, X, MessageCircle } from 'lucide-react'
 import { CURRENCY } from '../../config/brand'
+import { STORE_WHATSAPP_DISPLAY } from '../../utils/whatsapp'
 
 const MOCK_ORDER = {
   id: 'TZ-2024-312', customer: 'Priya Sharma', phone: '9876543210', email: 'priya@example.com',
@@ -149,8 +150,19 @@ export default function AdminOrderDetailPage() {
             <p className="text-sm text-zinc-500">{order.email}</p>
             <div className="flex gap-2 mt-3">
               <a href={`tel:${order.phone}`} className="flex-1 text-center text-xs font-semibold py-2 border border-zinc-200 rounded-xl hover:bg-zinc-50 transition-colors">Call</a>
-              <a href={`https://wa.me/91${order.phone}`} target="_blank" rel="noreferrer" className="flex-1 text-center text-xs font-semibold py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors">WhatsApp</a>
+              <a
+                href={`https://wa.me/91${String(order.phone).replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 text-center text-xs font-semibold py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors"
+              >
+                WhatsApp
+              </a>
             </div>
+            {/* Store-owner alert line: where new-order notifications are sent */}
+            <p className="mt-3 text-[11px] text-zinc-400 leading-relaxed">
+              New-order alerts go to <span className="font-semibold text-zinc-600">{STORE_WHATSAPP_DISPLAY}</span>
+            </p>
           </div>
 
           {/* Address */}

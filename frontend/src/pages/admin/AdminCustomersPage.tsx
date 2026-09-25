@@ -67,7 +67,7 @@ export default function AdminCustomersPage() {
                 <td className="px-5 py-4">
                   <div className="flex gap-2 text-xs">
                     <a href={`tel:${c.phone}`} className="px-2 py-1 bg-zinc-100 rounded-lg hover:bg-zinc-200 text-zinc-600">Call</a>
-                    <a href={`https://wa.me/91${c.phone}`} target="_blank" rel="noreferrer" className="px-2 py-1 bg-green-100 rounded-lg hover:bg-green-200 text-green-700">WhatsApp</a>
+                    <a href={`https://wa.me/91${String(c.phone).replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="px-2 py-1 bg-green-100 rounded-lg hover:bg-green-200 text-green-700">WhatsApp</a>
                   </div>
                 </td>
               </tr>

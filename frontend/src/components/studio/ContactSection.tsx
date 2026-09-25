@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowRight, Phone, MessageCircle, Mail, Check } from 'lucide-react'
 import { BRAND } from '../../config/brand'
+import { STORE_WHATSAPP_DISPLAY, waLink } from '../../utils/whatsapp'
 import api from '../../services/api'
 
 const ENQUIRY_TYPES = [
@@ -18,9 +19,13 @@ const PROMISES = [
   'Quick Response'
 ]
 
+const WHATSAPP_TEXT = encodeURIComponent(
+  `Hi ${BRAND.name}! I'd like to know more about your custom t-shirts.`
+)
+
 const CONTACT_CARDS = [
-  { label: 'CALL US', value: BRAND.phone, icon: Phone, href: `tel:${BRAND.phone}` },
-  { label: 'WHATSAPP', value: 'Chat With Us', icon: MessageCircle, href: `https://wa.me/91${BRAND.whatsapp}` },
+  { label: 'CALL US', value: STORE_WHATSAPP_DISPLAY, icon: Phone, href: `tel:+91${BRAND.phone}` },
+  { label: 'WHATSAPP', value: STORE_WHATSAPP_DISPLAY, icon: MessageCircle, href: waLink(`Hi ${BRAND.name}! I'd like to know more about your custom t-shirts.`) },
   { label: 'EMAIL', value: BRAND.email, icon: Mail, href: `mailto:${BRAND.email}` }
 ]
 

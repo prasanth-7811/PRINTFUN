@@ -5,7 +5,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..extensions import db
 from ..models import Order, OrderItem, OrderStatusHistory, CartItem, Notification
 from ..utils.auth import admin_required
-from ..utils.whatsapp import send_new_order_alert, send_order_confirmation
+from ..utils.whatsapp import (send_new_order_alert, send_order_confirmation,
+                              send_status_update_alert)
 
 orders_bp = Blueprint('orders', __name__)
 
@@ -101,6 +102,9 @@ def create_order():
         customer_phone=addr.get('phone'),
         item_count=total_qty,
         item_lines=item_lines,
+        address=addr,
+        payment_method=order.payment_method,
+        notes=data.get('special_instructions'),
     )
     # Send the customer a WhatsApp order confirmation (best-effort).
     send_order_confirmation(
@@ -212,4 +216,11 @@ def update_order_status(order_id):
     db.session.add(OrderStatusHistory(order_id=order.id, status=new_status,
                                        note=data.get('note'), created_by=admin.id))
     db.session.commit()
+
+    # Notify the store owner on WhatsApp (best-effort; never fails the update).
+    send_status_update_alert(
+        order.order_number, new_status,
+        note=data.get('note'),
+        tracking_id=order.tracking_id, courier=order.courier,
+    )
     return jsonify(order.to_dict())

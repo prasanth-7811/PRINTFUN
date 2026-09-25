@@ -22,6 +22,24 @@ class WhatsAppError(Exception):
     pass
 
 
+# Store-owner WhatsApp number that receives order alerts. Kept here so every
+# notification path resolves through one place; the value mirrors the
+# ORDER_ALERT_PHONE env var documented in .env.example.
+DEFAULT_ALERT_PHONE = '+919600650612'
+
+
+def get_alert_phone():
+    """Resolve the store-owner alert number from the environment.
+
+    Returns None only when ORDER_ALERT_PHONE is explicitly blank, which lets an
+    operator disable alerts without editing code.
+    """
+    value = os.environ.get('ORDER_ALERT_PHONE')
+    if value is None:
+        return DEFAULT_ALERT_PHONE
+    return value.strip() or None
+
+
 def _dev_print(to_phone, body):
     # Encode against the active stdout so an emoji in the body can't raise a
     # UnicodeEncodeError on a non-UTF-8 console (e.g. Windows cp1252).
@@ -129,8 +147,9 @@ def send_whatsapp(to_phone, body):
 
 
 def build_order_message(order_number, total, customer_name=None,
-                        customer_phone=None, item_count=None, item_lines=None):
-    """Compose a readable WhatsApp order-details message."""
+                        customer_phone=None, item_count=None, item_lines=None,
+                        address=None, payment_method=None, notes=None):
+    """Compose a readable WhatsApp order-details message for the store owner."""
     lines = ['🛍️ *New TEEZO Order*', f'Order: {order_number}']
     if customer_name:
         lines.append(f'Customer: {customer_name}')
@@ -143,22 +162,38 @@ def build_order_message(order_number, total, customer_name=None,
         lines.extend(f'• {line}' for line in item_lines)
     lines.append('')
     lines.append(f'Total: ₹{float(total):,.0f}')
+    if payment_method:
+        lines.append(f'Payment: {payment_method.upper()}')
+    if address:
+        lines.append('')
+        lines.append('Delivery:')
+        if address.get('line1'):
+            lines.append(address['line1'])
+        city_area = ', '.join(p for p in (address.get('area'), address.get('city')) if p)
+        if city_area:
+            lines.append(city_area)
+        state_pin = ' - '.join(p for p in (address.get('state'), address.get('pincode')) if p)
+        if state_pin:
+            lines.append(state_pin)
+    if notes:
+        lines.append(f'Note: {notes}')
     return '\n'.join(lines)
 
 
 def send_new_order_alert(order_number, total, customer_name=None,
-                         customer_phone=None, item_count=None, item_lines=None):
+                         customer_phone=None, item_count=None, item_lines=None,
+                         address=None, payment_method=None, notes=None):
     """Notify the store owner on WhatsApp that a new order was placed.
 
     Best-effort: swallows delivery errors and returns None on failure so a
     notification hiccup can never roll back an order that was already committed.
     Returns the delivery mode used on success.
     """
-    to_phone = os.environ.get('ORDER_ALERT_PHONE') or '+919600650612'
+    to_phone = get_alert_phone()
     if not to_phone:
         return None
-    body = build_order_message(order_number, total, customer_name,
-                               customer_phone, item_count, item_lines)
+    body = build_order_message(order_number, total, customer_name, customer_phone,
+                               item_count, item_lines, address, payment_method, notes)
     try:
         return send_whatsapp(to_phone, body)
     except Exception as exc:  # never break the order flow
@@ -199,4 +234,38 @@ def send_order_confirmation(to_phone, order_number, total, customer_name=None,
         return send_whatsapp(to_phone, body)
     except Exception as exc:  # never break the order flow
         print(f'[WhatsApp:order-confirmation] failed to notify {to_phone}: {exc}')
+        return None
+
+
+def build_status_update_message(order_number, new_status, note=None,
+                                tracking_id=None, courier=None):
+    """Compose a store-owner alert for an order status change."""
+    label = (new_status or '').replace('_', ' ').title()
+    lines = ['📦 *Order Update*', f'Order: {order_number}',
+             f'Status: {label}']
+    if courier:
+        lines.append(f'Courier: {courier}')
+    if tracking_id:
+        lines.append(f'Tracking: {tracking_id}')
+    if note:
+        lines.append(f'Note: {note}')
+    return '\n'.join(lines)
+
+
+def send_status_update_alert(order_number, new_status, note=None,
+                             tracking_id=None, courier=None):
+    """Notify the store owner that an order's status changed.
+
+    Best-effort, like the other alert helpers: a failure here must never block
+    an admin's status update.
+    """
+    to_phone = get_alert_phone()
+    if not to_phone:
+        return None
+    body = build_status_update_message(order_number, new_status, note,
+                                       tracking_id, courier)
+    try:
+        return send_whatsapp(to_phone, body)
+    except Exception as exc:  # never break the order flow
+        print(f'[WhatsApp:status-alert] failed to notify {to_phone}: {exc}')
         return None

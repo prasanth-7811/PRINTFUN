@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
-import { CheckCircle, Package, ArrowRight } from 'lucide-react'
+import { CheckCircle, Package, ArrowRight, MessageCircle } from 'lucide-react'
+import { STORE_WHATSAPP_DISPLAY, orderEnquiryLink } from '../utils/whatsapp'
 
 export default function OrderSuccessPage() {
   const { id } = useParams()
@@ -18,8 +19,7 @@ export default function OrderSuccessPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-zinc-100 p-6 mb-6 text-left">
-          <h3 className="font-semibold text-zinc-900 mb-4">What happens next?</h3>
-          <div className="space-y-3">
+          <h3 className="font-semibold text-zinc-900 mb-4">What happens next?</h3>          <div className="space-y-3">
             {[
               { step: '1', title: 'Design Review', desc: 'Our team will review your design within 24 hours.' },
               { step: '2', title: 'Production', desc: 'Once approved, your T-shirt goes into printing.' },
@@ -36,6 +36,17 @@ export default function OrderSuccessPage() {
             ))}
           </div>
         </div>
+
+        {/* WhatsApp support — fastest way to reach the store about this order */}
+        <a
+          href={orderEnquiryLink(String(id || ''))}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2.5 w-full bg-green-500 hover:bg-green-600 text-white py-3.5 rounded-2xl font-semibold text-sm transition-colors mb-3"
+        >
+          <MessageCircle size={18} fill="currentColor" strokeWidth={0} />
+          Contact us on WhatsApp · {STORE_WHATSAPP_DISPLAY}
+        </a>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link to={`/orders/${id}`} className="inline-flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-semibold text-sm hover:bg-zinc-800 transition-colors">

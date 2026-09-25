@@ -5,15 +5,19 @@ export const BRAND = {
   name: 'TEEZO',
   tagline: 'Design It. Wear It. Make It Yours.',
   email: 'hello@teezo.com',
-  phone: '6369794482',
-  whatsapp: '6369794482',
+  phone: '9600650612',
+  whatsapp: '9600650612',
   address: 'Chennai, Tamil Nadu, India',
   instagram: 'https://instagram.com/teezo',
   facebook: 'https://facebook.com/teezo',
   youtube: 'https://youtube.com/@teezo',
 } as const
 
-export const API_BASE = import.meta.env.VITE_API_URL || '/api'
+// API base URL. `import.meta.env` is a Vite injection that is undefined under
+// plain Node (e.g. when running the link smoke check), so read it defensively;
+// behaviour under Vite is unchanged.
+const _VITE_API_URL = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_URL
+export const API_BASE = _VITE_API_URL || '/api'
 
 export const CURRENCY = '₹'
 

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { Truck, CheckCircle, Clock } from 'lucide-react'
+import { Truck, CheckCircle, Clock, MessageCircle } from 'lucide-react'
 import { orderService } from '../services/orders'
 import type { Order, OrderStatus } from '../types'
 import { CURRENCY } from '../config/brand'
+import { STORE_WHATSAPP_DISPLAY, orderEnquiryLink } from '../utils/whatsapp'
 
 const TIMELINE: { status: OrderStatus; label: string }[] = [
   { status: 'placed', label: 'Order Placed' },
@@ -145,6 +146,18 @@ export default function OrderDetailPage() {
                 <p className="text-zinc-400">{order.address.phone}</p>
               </div>
             </div>
+
+            {/* WhatsApp support */}
+            <a
+              href={orderEnquiryLink(order.order_number, order.total)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-2xl font-semibold text-sm transition-colors"
+            >
+              <MessageCircle size={17} fill="currentColor" strokeWidth={0} />
+              WhatsApp us about this order
+            </a>
+            <p className="text-center text-xs text-zinc-400 -mt-1.5">{STORE_WHATSAPP_DISPLAY}</p>
           </div>
         </div>
       </div>

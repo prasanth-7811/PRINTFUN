@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Heart, ShieldCheck, Truck, RotateCcw, Star } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
-import { CURRENCY } from '../config/brand'
+import { CURRENCY, BRAND } from '../config/brand'
 import { productService } from '../services/products'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -218,8 +218,8 @@ export default function ProductPage() {
                     ? 'Kids sizes and pricing for this product are being finalised. Call or WhatsApp us and we’ll quote you immediately.'
                     : 'This variant is on its way. Check back soon.'}
                 </p>
-                <a href={`tel:+91${'6369794482'}`} className="inline-block mt-3 text-xs font-semibold text-black underline">
-                  Call +91 6369794482 for pricing
+                <a href={`tel:+91${BRAND.phone}`} className="inline-block mt-3 text-xs font-semibold text-black underline">
+                  Call +91 96006 50612 for pricing
                 </a>
               </div>
             ) : (
