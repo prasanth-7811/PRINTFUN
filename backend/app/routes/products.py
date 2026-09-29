@@ -98,8 +98,26 @@ def get_filters():
 
 @products_bp.route('/featured', methods=['GET'])
 def get_featured():
-    products = Product.query.filter_by(is_active=True, is_featured=True).limit(8).all()
-    return jsonify([p.to_dict() for p in products])
+    LIMIT = 8
+    featured = (Product.query
+                .filter_by(is_active=True, is_featured=True)
+                .order_by(Product.created_at.desc())
+                .limit(LIMIT).all())
+    # The homepage collection preview should never be empty while the catalog
+    # has products, so top up with the most recent active products when fewer
+    # than LIMIT are explicitly featured. Explicitly featured products keep
+    # their priority at the front of the list.
+    if len(featured) < LIMIT:
+        seen = {p.id for p in featured}
+        recent = (Product.query
+                  .filter_by(is_active=True)
+                  .order_by(Product.created_at.desc()).all())
+        for p in recent:
+            if p.id not in seen:
+                featured.append(p)
+                if len(featured) >= LIMIT:
+                    break
+    return jsonify([p.to_dict() for p in featured])
 
 
 @products_bp.route('/<int:product_id>', methods=['GET'])

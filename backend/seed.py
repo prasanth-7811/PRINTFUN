@@ -141,7 +141,7 @@ CATALOG = [
         'type': 'Round Neck', 'audiences': ['kids', 'adults'],
         'description': 'Everyday round neck tees in combed cotton and poly cotton — '
                        'the blank canvas for custom prints.',
-        'images': ['https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&q=80'],
+        'images': ['/products/round-neck.png'],
         'variants': [
             {
                 'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck',
@@ -170,7 +170,7 @@ CATALOG = [
         'type': 'Polo', 'audiences': ['kids', 'adults'],
         'description': 'Premium polos in pique, polyester and acid-wash finishes — '
                        'smart enough for uniforms, comfy enough for daily wear.',
-        'images': ['https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=600&q=80'],
+        'images': ['/products/polo.png'],
         'variants': [
             {
                 'name': 'Premium Polo T-Shirt', 'slug': 'premium-polo',
@@ -205,7 +205,7 @@ CATALOG = [
         'type': 'Oversized', 'audiences': ['kids', 'adults'],
         'description': 'Drop-shoulder oversized fits in French Terry, poly cotton and '
                        'acid wash — built for bold, full-width prints.',
-        'images': ['https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&q=80'],
+        'images': ['/products/oversized.png'],
         'variants': [
             {
                 'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry',
@@ -240,7 +240,7 @@ CATALOG = [
         'name': 'Hoodies', 'slug': 'hoodies',
         'type': 'Hoodies', 'audiences': ['adults'],
         'description': 'Heavyweight loopknit-raised hoodies. Adults only.',
-        'images': ['https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=600&q=80'],
+        'images': ['/products/hoodie.png'],
         'variants': [
             {
                 'name': 'Regular Hoodie', 'slug': 'regular-hoodie',
