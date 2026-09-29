@@ -1,4 +1,4 @@
-"""Seed database with the TEEZO product catalog.
+"""Seed database with the PRINTHEAVEN product catalog.
 
 Catalog data comes from the product availability image / catalog PDF:
 4 categories, adult variants with real specs, and kids placeholders that stay
@@ -326,15 +326,15 @@ with app.app_context():
         db.session.commit()
 
     # Admin user
-    if not User.query.filter_by(email='admin@teezo.com').first():
-        admin = User(name='Admin', email='admin@teezo.com',
+    if not User.query.filter_by(email='admin@printheaven.co.in').first():
+        admin = User(name='Admin', email='admin@printheaven.co.in',
                      password_hash=User.hash_password('admin123'), role='admin',
                      email_verified=True)
         db.session.add(admin)
 
     # Demo customer (pre-verified so the storefront is usable out of the box)
-    if not User.query.filter_by(email='demo@teezo.com').first():
-        customer = User(name='Rahul Sharma', email='demo@teezo.com',
+    if not User.query.filter_by(email='demo@printheaven.co.in').first():
+        customer = User(name='Rahul Sharma', email='demo@printheaven.co.in',
                         password_hash=User.hash_password('demo123'), role='customer',
                         phone='9876543210', email_verified=True)
         db.session.add(customer)
@@ -412,6 +412,6 @@ with app.app_context():
 
     db.session.commit()
     print("Database seeded successfully!")
-    print("  Admin: admin@teezo.com / admin123")
-    print("  Demo:  demo@teezo.com / demo123")
+    print("  Admin: admin@printheaven.co.in / admin123")
+    print("  Demo:  demo@printheaven.co.in / demo123")
     print("  Coupons: WELCOME10, FLAT100, BULK20, FIRST50")

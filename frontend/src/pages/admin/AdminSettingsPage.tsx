@@ -16,14 +16,14 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [settings, setSettings] = useState({
-    store_name: 'Teezo',
-    store_email: 'hello@teezo.com',
+    store_name: 'PRINTHEAVEN',
+    store_email: 'hello@printheaven.co.in',
     store_phone: '9600650612',
     store_address: 'Chennai, Tamil Nadu, India',
     whatsapp_number: '9600650612',
-    instagram_url: 'https://instagram.com/teezo',
-    facebook_url: 'https://facebook.com/teezo',
-    youtube_url: 'https://youtube.com/@teezo',
+    instagram_url: 'https://instagram.com/printheaven',
+    facebook_url: 'https://facebook.com/printheaven',
+    youtube_url: 'https://youtube.com/@printheaven',
     // Pricing
     base_tshirt_price: 599,
     front_print_price: 149,
@@ -151,7 +151,7 @@ export default function AdminSettingsPage() {
               ].map(f => (
                 <div key={f.key}>
                   <label className="text-sm font-medium text-zinc-700 mb-1.5 block">{f.label} URL</label>
-                  <input type="url" value={settings[f.key]} onChange={e => updateSetting(f.key, e.target.value)} placeholder={`https://${f.label.toLowerCase()}.com/teezo`}
+                  <input type="url" value={settings[f.key]} onChange={e => updateSetting(f.key, e.target.value)} placeholder={`https://${f.label.toLowerCase()}.com/printheaven`}
                     className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
                 </div>
               ))}

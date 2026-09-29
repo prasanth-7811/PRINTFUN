@@ -71,6 +71,6 @@ def create_app(config_name=None):
 
     @app.route('/api/health')
     def health():
-        return jsonify({'status': 'ok', 'service': 'teezo-api'})
+        return jsonify({'status': 'ok', 'service': 'printheaven-api'})
 
     return app

@@ -150,7 +150,7 @@ def build_order_message(order_number, total, customer_name=None,
                         customer_phone=None, item_count=None, item_lines=None,
                         address=None, payment_method=None, notes=None):
     """Compose a readable WhatsApp order-details message for the store owner."""
-    lines = ['🛍️ *New TEEZO Order*', f'Order: {order_number}']
+    lines = ['🛍️ *New PRINTHEAVEN Order*', f'Order: {order_number}']
     if customer_name:
         lines.append(f'Customer: {customer_name}')
     if customer_phone:
@@ -206,7 +206,7 @@ def build_customer_order_message(order_number, total, customer_name=None,
     """Compose the customer-facing WhatsApp order confirmation."""
     first = customer_name.split()[0] if customer_name and customer_name.strip() else None
     greeting = f'Hi {first}, thanks for your order!' if first else 'Thanks for your order!'
-    lines = ['✅ *Order Confirmed — TEEZO*', greeting, '', f'Order: {order_number}']
+    lines = ['✅ *Order Confirmed — PRINTHEAVEN*', greeting, '', f'Order: {order_number}']
     if item_count:
         lines.append(f'Items: {item_count}')
     if item_lines:

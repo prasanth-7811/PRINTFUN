@@ -36,7 +36,7 @@ export default function AdminLoginPage() {
               <label className="text-sm font-medium text-zinc-400 mb-1.5 block">Email</label>
               <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
                 className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20"
-                placeholder="admin@teezo.com" />
+                placeholder="admin@printheaven.co.in" />
             </div>
             <div>
               <label className="text-sm font-medium text-zinc-400 mb-1.5 block">Password</label>
@@ -49,7 +49,7 @@ export default function AdminLoginPage() {
               {loading ? <><div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />Signing in...</> : 'Sign In'}
             </button>
           </form>
-          <p className="text-xs text-zinc-600 text-center mt-4">Demo: admin@teezo.com / admin123</p>
+          <p className="text-xs text-zinc-600 text-center mt-4">Demo: admin@printheaven.co.in / admin123</p>
         </div>
       </div>
     </div>

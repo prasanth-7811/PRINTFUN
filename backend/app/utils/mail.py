@@ -31,7 +31,7 @@ def _frontend_base():
 def _from_address():
     return (os.environ.get('MAIL_FROM')
             or current_app.config.get('MAIL_FROM')
-            or 'TEEZO <noreply@teezo.com>')
+            or 'PRINTHEAVEN <noreply@printheaven.co.in>')
 
 
 def _send_resend(to_addr, subject, html, text):
@@ -156,7 +156,7 @@ def _layout(user_name, body, note=''):
                     box-shadow:0 1px 3px rgba(0,0,0,.08);">
         <tr>
           <td style="background:#0a0a0a;padding:24px 32px;">
-            <span style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-.04em;">TEEZO</span>
+            <span style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-.04em;">PRINTHEAVEN</span>
           </td>
         </tr>
         <tr><td style="padding:32px;">
@@ -166,12 +166,12 @@ def _layout(user_name, body, note=''):
           {note}
           <p style="margin:24px 0 0;font-size:12px;color:#a1a1aa;line-height:1.6;">
             If you did not request this, you can safely ignore this email. Never share
-            this link with anyone — TEEZO will never ask for your password.
+            this link with anyone — PRINTHEAVEN will never ask for your password.
           </p>
         </td></tr>
         <tr><td style="background:#fafafa;padding:16px 32px;border-top:1px solid #e4e4e7;">
           <p style="margin:0;font-size:12px;color:#71717a;">
-            TEEZO · Chennai, Tamil Nadu, India · Support: {os.environ.get('SUPPORT_EMAIL', 'hello@teezo.com')}
+            PRINTHEAVEN · Chennai, Tamil Nadu, India · Support: {os.environ.get('SUPPORT_EMAIL', 'hello@printheaven.co.in')}
           </p>
         </td></tr>
       </table>
@@ -185,7 +185,7 @@ def send_verification_email(user, raw_token):
     url = f'{_frontend_base()}/verify-email?token={raw_token}'
     body = (
         '<p style="margin:0 0 4px;font-size:15px;color:#27272a;line-height:1.6;">'
-        'Welcome to TEEZO! Your account has been created — one last step before you '
+        'Welcome to PRINTHEAVEN! Your account has been created — one last step before you '
         'can start designing.</p>'
         '<p style="margin:0 0 12px;font-size:15px;color:#27272a;line-height:1.6;">'
         'Confirm your email address to activate your account:</p>'
@@ -198,9 +198,9 @@ def send_verification_email(user, raw_token):
             '⏱ This link expires in 24 hours and can only be used once.</p>')
     return send_email(
         user.email,
-        'Verify Your TEEZO Account',
+        'Verify Your PRINTHEAVEN Account',
         _layout(user.name, body, note),
-        text=(f'Welcome to TEEZO, {user.name}!\n\n'
+        text=(f'Welcome to PRINTHEAVEN, {user.name}!\n\n'
               'Verify your email address to activate your account:\n'
               f'{url}\n\nThis link expires in 24 hours and can only be used once.'),
     )
@@ -210,7 +210,7 @@ def send_password_reset_email(user, raw_token):
     url = f'{_frontend_base()}/reset-password?token={raw_token}'
     body = (
         '<p style="margin:0 0 4px;font-size:15px;color:#27272a;line-height:1.6;">'
-        'We received a request to reset the password on your TEEZO account.</p>'
+        'We received a request to reset the password on your PRINTHEAVEN account.</p>'
         '<p style="margin:0 0 12px;font-size:15px;color:#27272a;line-height:1.6;">'
         'Choose a new password below:</p>'
         f'{_button(url, "RESET PASSWORD")}'
@@ -222,8 +222,8 @@ def send_password_reset_email(user, raw_token):
             '⏱ This link expires in 1 hour and can only be used once.</p>')
     return send_email(
         user.email,
-        'Reset Your TEEZO Password',
+        'Reset Your PRINTHEAVEN Password',
         _layout(user.name, body, note),
-        text=(f'Reset your TEEZO password, {user.name}.\n\n'
+        text=(f'Reset your PRINTHEAVEN password, {user.name}.\n\n'
               f'{url}\n\nThis link expires in 1 hour and can only be used once.'),
     )

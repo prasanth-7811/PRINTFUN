@@ -61,7 +61,7 @@ export default function RegisterPage() {
   return (
     <AuthLayout
       title="Create Your Account"
-      subtitle="Join TEEZO and start designing"
+      subtitle="Join PRINTHEAVEN and start designing"
       footer={
         <p className="text-sm text-zinc-500">
           Already have an account?{' '}

@@ -2,15 +2,15 @@
 // Every value here is consumed by mail templates, the footer, the navbar and
 // the email footer, so keep it as the single source of truth.
 export const BRAND = {
-  name: 'TEEZO',
+  name: 'PRINTHEAVEN',
   tagline: 'Design It. Wear It. Make It Yours.',
-  email: 'hello@teezo.com',
+  email: 'hello@printheaven.co.in',
   phone: '9600650612',
   whatsapp: '9600650612',
   address: 'Chennai, Tamil Nadu, India',
-  instagram: 'https://instagram.com/teezo',
-  facebook: 'https://facebook.com/teezo',
-  youtube: 'https://youtube.com/@teezo',
+  instagram: 'https://instagram.com/printheaven',
+  facebook: 'https://facebook.com/printheaven',
+  youtube: 'https://youtube.com/@printheaven',
 } as const
 
 // API base URL. `import.meta.env` is a Vite injection that is undefined under

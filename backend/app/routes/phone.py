@@ -102,7 +102,7 @@ def send_otp():
 
     delivered = 'none'
     try:
-        delivered = send_sms(destination, f'{raw} is your TEEZO verification code. '
+        delivered = send_sms(destination, f'{raw} is your PRINTHEAVEN verification code. '
                                            f'Valid for {OTP_TTL_MINUTES} minutes. '
                                            f'Do not share it with anyone.')
     except SmsError:

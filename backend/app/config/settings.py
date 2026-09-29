@@ -26,7 +26,7 @@ def _database_uri():
     """
     uri = os.environ.get(
         'DATABASE_URL',
-        'postgresql+psycopg2://postgres:password@localhost:5432/teezo',
+        'postgresql+psycopg2://postgres:password@localhost:5432/printheaven',
     )
     # A bare `postgresql://` URL selects psycopg2's legacy default driver; pin
     # psycopg2 explicitly so the dialect matches requirements.txt.
@@ -123,7 +123,7 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', _default_uploads)
     if not os.access(os.path.dirname(UPLOAD_FOLDER) or '.', os.W_OK):
         UPLOAD_FOLDER = os.path.join(
-            os.environ.get('TMPDIR', '/tmp'), 'teezo-uploads')
+            os.environ.get('TMPDIR', '/tmp'), 'printheaven-uploads')
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
     SQLALCHEMY_ENGINE_OPTIONS = _engine_options(SQLALCHEMY_DATABASE_URI)
     # Supabase's pooler only — the listeners are registered in create_app().
@@ -140,8 +140,8 @@ class Config:
     # --- Auth / email --------------------------------------------------------
     # Public frontend origin, used to build verification & reset links.
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
-    MAIL_FROM = os.environ.get('MAIL_FROM', 'TEEZO <noreply@teezo.com>')
-    SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'hello@teezo.com')
+    MAIL_FROM = os.environ.get('MAIL_FROM', 'PRINTHEAVEN <noreply@printheaven.co.in>')
+    SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'hello@printheaven.co.in')
     # Enable to return the verification link / OTP in the API response
     # alongside the real delivery — strictly for local development.
     DEV_RETURN_TOKEN = os.environ.get('DEV_RETURN_TOKEN', '').lower() in ('1', 'true')
@@ -153,9 +153,9 @@ class Config:
     TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
     TWILIO_FROM = os.environ.get('TWILIO_FROM')
     MSG91_AUTH_KEY = os.environ.get('MSG91_AUTH_KEY')
-    MSG91_SENDER_ID = os.environ.get('MSG91_SENDER_ID', 'TEEZO')
+    MSG91_SENDER_ID = os.environ.get('MSG91_SENDER_ID', 'PRINTHEAVEN')
     MSG91_OTP_TEMPLATE_ID = os.environ.get('MSG91_OTP_TEMPLATE_ID')
-    SMS_FROM = os.environ.get('SMS_FROM', 'TEEZO')
+    SMS_FROM = os.environ.get('SMS_FROM', 'PRINTHEAVEN')
 
     # --- WhatsApp order alerts ----------------------------------------------
     # Store-owner WhatsApp number that receives a message on every new order.

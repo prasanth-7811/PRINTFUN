@@ -37,7 +37,7 @@ def _send_msg91(to_phone, body):
     """MSG91 transactional SMS (India-focused, DLT-compliant)."""
     import requests
     auth_key = os.environ['MSG91_AUTH_KEY']
-    sender_id = os.environ.get('MSG91_SENDER_ID', 'TEEZO')
+    sender_id = os.environ.get('MSG91_SENDER_ID', 'PRINTHEAVEN')
     template_id = os.environ.get('MSG91_OTP_TEMPLATE_ID')
     payload = {
         'sender': sender_id,
@@ -62,7 +62,7 @@ def _send_brevo_sms(to_phone, body):
     """Brevo transactional SMS."""
     import requests
     api_key = os.environ['BREVO_API_KEY']
-    sender = os.environ.get('SMS_FROM', 'TEEZO')
+    sender = os.environ.get('SMS_FROM', 'PRINTHEAVEN')
     response = requests.post(
         'https://api.brevo.com/v3/transactionalSMS/sms',
         json={'sender': {'name': sender},

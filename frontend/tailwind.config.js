@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // TEEZO brand accent = red (paired with black/white neutrals used
+        // PRINTHEAVEN brand accent = red (paired with black/white neutrals used
         // directly via zinc/black/white utilities). Matches the red-500 family
         // already used ad-hoc across the app so `brand-*` and `red-*` align.
         brand: {

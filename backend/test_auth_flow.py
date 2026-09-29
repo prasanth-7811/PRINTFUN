@@ -34,7 +34,7 @@ def step(n, label, status, text, expected=None, extra=''):
 
 
 SUFFIX = '5'
-EMAIL = f'e2e{SUFFIX}@teezo.com'
+EMAIL = f'e2e{SUFFIX}@printheaven.co.in'
 
 print('=' * 78)
 print('AUTH FLOW TEST')
@@ -70,14 +70,14 @@ step(4, 'Duplicate email (reject)', s, r['errors'].get('email', msg(r)), expecte
 
 # 5. Weak password -> 400
 s, r = call('POST', '/auth/register', {
-    'name': 'Weak', 'email': f'weak{SUFFIX}@teezo.com', 'password': '123',
+    'name': 'Weak', 'email': f'weak{SUFFIX}@printheaven.co.in', 'password': '123',
     'confirm_password': '123', 'accept_terms': True,
 })
 step(5, 'Weak password (reject)', s, r['errors'].get('password', msg(r)), expected=400)
 
 # 6. Missing terms -> 400
 s, r = call('POST', '/auth/register', {
-    'name': 'No Terms', 'email': f'noterms{SUFFIX}@teezo.com',
+    'name': 'No Terms', 'email': f'noterms{SUFFIX}@printheaven.co.in',
     'password': 'TestPass123', 'confirm_password': 'TestPass123', 'accept_terms': False,
 })
 step(6, 'Terms not accepted (reject)', s, r['errors'].get('accept_terms', msg(r)), expected=400)
@@ -152,7 +152,7 @@ step(20, 'Logout', s, msg(r))
 
 # 21. Admin login
 s, r = call('POST', '/auth/admin-login',
-            {'email': 'admin@teezo.com', 'password': 'admin123'})
+            {'email': 'admin@printheaven.co.in', 'password': 'admin123'})
 step(21, 'Admin login', s, msg(r),
      f"role={r['user']['role']} verified={r['user']['email_verified']}")
 
@@ -163,16 +163,16 @@ step(22, 'Customer cannot admin-login', s, msg(r), expected=403)
 
 # 23. Unverified user resend
 s, r = call('POST', '/auth/register', {
-    'name': 'Unverified', 'email': f'unv{SUFFIX}@teezo.com',
+    'name': 'Unverified', 'email': f'unv{SUFFIX}@printheaven.co.in',
     'password': 'TestPass123', 'confirm_password': 'TestPass123', 'accept_terms': True,
 })
 s2, r2 = call('POST', '/auth/resend-verification',
-              {'email': f'unv{SUFFIX}@teezo.com'})
+              {'email': f'unv{SUFFIX}@printheaven.co.in'})
 step(23, 'Resend verification', s2, msg(r2)[:60],
      expected=200 if r2.get('email_sent') else 429)
 
 # 24. Resend cooldown
-s, r = call('POST', '/auth/resend-verification', {'email': f'unv{SUFFIX}@teezo.com'})
+s, r = call('POST', '/auth/resend-verification', {'email': f'unv{SUFFIX}@printheaven.co.in'})
 step(24, 'Resend cooldown (throttle)', s, f"retry_after={r.get('retry_after')}", expected=429)
 
 # 25. Unknown email -> generic reply

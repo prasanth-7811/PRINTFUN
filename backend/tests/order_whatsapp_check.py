@@ -39,7 +39,7 @@ app = create_app()
 # A real verified buyer, created directly so the flow doesn't depend on the
 # project's live email provider accepting a throwaway address.
 with app.app_context():
-    email = f'wa-check-{abs(hash("wa")) % 10_000_000}@teezo.com'
+    email = f'wa-check-{abs(hash("wa")) % 10_000_000}@printheaven.co.in'
     buyer = User(name='WA Check', email=email, phone='9600650612',
                  password_hash=User.hash_password('TestPass123'),
                  role='customer', email_verified=True)
@@ -114,7 +114,7 @@ output = buf.getvalue()
 # Two alerts fire per order: the store-owner alert and the customer
 # confirmation. Anchor on the owner template so we assert the right block even
 # when both are printed.
-owner_marker = 'New TEEZO Order'
+owner_marker = 'New PRINTHEAVEN Order'
 idx = output.find('[WhatsApp:dev] To: ')
 anchor_pos = output.find(owner_marker)
 if idx == -1:
@@ -132,7 +132,7 @@ else:
     alert_body = block.split('\n', 1)[1] if '\n' in block else ''
     check('Alert sent to STORE number', recipient == STORE_NUMBER,
           f"To: {recipient}  (expected {STORE_NUMBER})")
-    check('Alert is the NEW-ORDER template', 'New TEEZO Order' in alert_body,
+    check('Alert is the NEW-ORDER template', 'New PRINTHEAVEN Order' in alert_body,
           f"first line: {alert_body.strip().splitlines()[0] if alert_body.strip() else '?'}")
     if order_no:
         check('Alert carries order number', order_no in alert_body, f"#{order_no}")

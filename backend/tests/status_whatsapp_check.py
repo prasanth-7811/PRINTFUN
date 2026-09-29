@@ -34,7 +34,7 @@ with app.app_context():
     admin = User.query.filter_by(role='admin').first()
     if admin is None:
         # Promote a throwaway user rather than touch an existing account.
-        admin = User(name='WA Admin', email=f'wa-admin-{abs(hash("wa2")) % 10_000_000}@teezo.com',
+        admin = User(name='WA Admin', email=f'wa-admin-{abs(hash("wa2")) % 10_000_000}@printheaven.co.in',
                      password_hash=User.hash_password('TestPass123'),
                      role='admin', email_verified=True)
         db.session.add(admin)

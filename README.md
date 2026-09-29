@@ -1,4 +1,4 @@
-# TEEZO — Custom T-Shirt E-Commerce Platform
+# PRINTHEAVEN — Custom T-Shirt E-Commerce Platform
 
 > Design It. Wear It. Make It Yours.
 
@@ -21,7 +21,7 @@ A full-stack premium custom T-shirt e-commerce platform with an interactive Desi
 ## Project Structure
 
 ```
-teezo/
+printheaven/
 ├── frontend/          # React + Vite frontend
 │   └── src/
 │       ├── components/
@@ -49,7 +49,7 @@ teezo/
 
 ```bash
 git clone <repo-url>
-cd teezo
+cd printheaven
 cp .env.example backend/.env
 ```
 
@@ -97,8 +97,8 @@ Frontend runs at: http://localhost:5173
 
 | Role     | Email              | Password  |
 |----------|--------------------|-----------|
-| Admin    | admin@teezo.com    | admin123  |
-| Customer | demo@teezo.com     | demo123   |
+| Admin    | admin@printheaven.co.in    | admin123  |
+| Customer | demo@printheaven.co.in     | demo123   |
 
 ## Demo Coupons
 
@@ -184,13 +184,13 @@ rest, single-use, and expire in 24 hours.
 #### Option A — Resend (easiest, recommended)
 
 1. Sign up at [resend.com](https://resend.com) → **API Keys** → **Create API Key**.
-2. Verify your sending domain (e.g. `teezo.com`) under **Domains**. Resend's
+2. Verify your sending domain (e.g. `printheaven.co.in`) under **Domains**. Resend's
    `onboarding@resend.dev` address works immediately for testing only.
 3. In `backend/.env`:
 
 ```env
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-MAIL_FROM=TEEZO <noreply@teezo.com>
+MAIL_FROM=PRINTHEAVEN <noreply@printheaven.co.in>
 FRONTEND_URL=https://your-frontend-domain.com
 DEV_RETURN_TOKEN=false
 ```
@@ -200,12 +200,12 @@ DEV_RETURN_TOKEN=false
 1. Sign up at [brevo.com](https://www.brevo.com) → **SMTP & API** → **API Keys**
    → generate a v3 key.
 2. **Senders & IP** → add and confirm your sender address
-   (e.g. `noreply@teezo.com`).
+   (e.g. `noreply@printheaven.co.in`).
 3. In `backend/.env`:
 
 ```env
 BREVO_API_KEY=xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-MAIL_FROM=TEEZO <noreply@teezo.com>
+MAIL_FROM=PRINTHEAVEN <noreply@printheaven.co.in>
 FRONTEND_URL=https://your-frontend-domain.com
 DEV_RETURN_TOKEN=false
 ```
@@ -221,7 +221,7 @@ SMTP_HOST=smtp-relay.brevo.com     # or smtp.gmail.com, smtp.zoho.in, ...
 SMTP_PORT=587
 SMTP_USER=your-login-or-email
 SMTP_PASSWORD=your-password-or-app-password
-MAIL_FROM=TEEZO <noreply@teezo.com>
+MAIL_FROM=PRINTHEAVEN <noreply@printheaven.co.in>
 FRONTEND_URL=https://your-frontend-domain.com
 DEV_RETURN_TOKEN=false
 ```
@@ -269,7 +269,7 @@ DEV_RETURN_TOKEN=false
 
 ```env
 MSG91_AUTH_KEY=your-auth-key
-MSG91_SENDER_ID=TEEZO
+MSG91_SENDER_ID=PRINTHEAVEN
 MSG91_OTP_TEMPLATE_ID=your-dlt-template-id
 DEV_RETURN_TOKEN=false
 ```
@@ -280,7 +280,7 @@ Uses the same `BREVO_API_KEY` as email, so only add:
 
 ```env
 BREVO_API_KEY=xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-SMS_FROM=TEEZO
+SMS_FROM=PRINTHEAVEN
 DEV_RETURN_TOKEN=false
 ```
 
