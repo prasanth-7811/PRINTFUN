@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Package, ChevronRight, RotateCcw, X } from 'lucide-react'
 import { orderService } from '../services/orders'
 import type { Order } from '../types'
-import { CURRENCY } from '../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
 
 const STATUS_LABELS: Record<string, string> = {
   placed: 'Order Placed', confirmed: 'Confirmed', design_review: 'Design Review',
@@ -85,7 +85,7 @@ export default function OrdersPage() {
               <div className="flex gap-3 mb-4 overflow-x-auto pb-1">
                 {order.items.map(item => (
                   <div key={item.id} className="shrink-0 w-14 h-14 rounded-xl bg-zinc-100 overflow-hidden">
-                    <img src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=100&q=80'} alt="" className="w-full h-full object-cover" />
+                    <img src={item.product?.images?.[0] || PLACEHOLDER_IMAGE} alt="" className="w-full h-full object-cover" />
                   </div>
                 ))}
               </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, Search, X, Image as ImageIcon, Package } from 'lucide-react'
-import { CURRENCY } from '../../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE } from '../../config/brand'
 import { Modal } from '../../components/ui/index'
 import { productService } from '../../services/products'
 import type { Product, ProductVariant, Audience } from '../../types'
@@ -149,7 +149,7 @@ export default function AdminProductsPage() {
           return (
             <div key={p.id} className="bg-white rounded-2xl border border-zinc-100 overflow-hidden">
               <div className="flex items-center gap-4 p-4">
-                <img src={p.images?.[0]} alt="" className="w-12 h-12 rounded-xl object-cover bg-zinc-100" />
+                <img src={p.images?.[0] || PLACEHOLDER_IMAGE} alt="" className="w-12 h-12 rounded-xl object-cover bg-zinc-100" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-zinc-900">{p.name}</span>

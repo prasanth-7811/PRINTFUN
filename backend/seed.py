@@ -149,6 +149,7 @@ CATALOG = [
                 'material': 'Single Jersey', 'gsm': 180,
                 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/round-neck.png'],
             },
             {
                 'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton',
@@ -156,12 +157,14 @@ CATALOG = [
                 'material': 'Poly Cotton', 'gsm': 180,
                 'colours': colours('Black'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/round-neck.png'],
             },
             # Kids variant: sizes/price deliberately left unset until admin configures it.
             {
                 'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids',
                 'audience': 'kids', 'price': None, 'fabric': None, 'material': None,
                 'gsm': None, 'colours': [], 'sizes': [],
+                'images': ['/products/round-neck.png'],
             },
         ],
     },
@@ -178,6 +181,7 @@ CATALOG = [
                 'material': 'Pique', 'gsm': 240,
                 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/polo.png'],
             },
             {
                 'name': 'Polyester Mars Polo T-Shirt', 'slug': 'polyester-mars-polo',
@@ -185,6 +189,7 @@ CATALOG = [
                 'material': 'Polyester Mars', 'gsm': 200,
                 'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/polo.png'],
             },
             {
                 'name': 'Acid Wash Polo T-Shirt', 'slug': 'acid-wash-polo',
@@ -192,11 +197,13 @@ CATALOG = [
                 'material': 'Poly Cotton', 'gsm': 220,
                 'colours': colours('Black'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/polo.png'],
             },
             {
                 'name': 'Polo T-Shirt — Kids', 'slug': 'polo-kids',
                 'audience': 'kids', 'price': None, 'fabric': None, 'material': None,
                 'gsm': None, 'colours': [], 'sizes': [],
+                'images': ['/products/polo.png'],
             },
         ],
     },
@@ -214,6 +221,7 @@ CATALOG = [
                 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink',
                                    'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/oversized.png'],
             },
             {
                 'name': 'Oversized T-Shirt — Poly Cotton', 'slug': 'oversized-poly-cotton',
@@ -221,6 +229,7 @@ CATALOG = [
                 'material': 'Poly Cotton', 'gsm': 240,
                 'colours': colours('Maroon', 'White', 'Black', 'Navy', 'Half White'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/oversized.png'],
             },
             {
                 'name': 'Acid Wash Oversized T-Shirt', 'slug': 'acid-wash-oversized',
@@ -228,11 +237,13 @@ CATALOG = [
                 'material': '100% RL Combed Cotton', 'gsm': 240,
                 'colours': colours('Olive Green', 'White', 'Maroon', 'Black'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/oversized.png'],
             },
             {
                 'name': 'Oversized T-Shirt — Kids', 'slug': 'oversized-kids',
                 'audience': 'kids', 'price': None, 'fabric': None, 'material': None,
                 'gsm': None, 'colours': [], 'sizes': [],
+                'images': ['/products/oversized.png'],
             },
         ],
     },
@@ -248,6 +259,7 @@ CATALOG = [
                 'material': 'Loopknit Raised', 'gsm': 300,
                 'colours': colours('Black'),
                 'sizes': ADULT_SIZES,
+                'images': ['/products/hoodie.png'],
             },
             {
                 # Acid Wash Hoodie: fabric / GSM / colour intentionally left blank —
@@ -256,6 +268,7 @@ CATALOG = [
                 'audience': 'adults', 'price': 440, 'fabric': None,
                 'material': None, 'gsm': None,
                 'colours': [], 'sizes': ADULT_SIZES,
+                'images': ['/products/hoodie.png'],
             },
         ],
     },
@@ -341,7 +354,7 @@ with app.app_context():
                 fabric=next((v['fabric'] for v in entry['variants'] if v.get('fabric')), None),
                 colours=_union_colours(entry['variants']),
                 sizes=ADULT_SIZES,
-                is_active=True, is_new=True,
+                is_active=True, is_new=True, is_featured=True,
             )
             db.session.add(product)
             db.session.flush()
@@ -366,9 +379,14 @@ with app.app_context():
                 )
                 db.session.add(variant)
                 db.session.flush()
-            for field in ['name', 'price', 'fabric', 'material', 'gsm', 'colours', 'sizes']:
+            for field in ['name', 'price', 'fabric', 'material', 'gsm', 'colours', 'sizes',
+                          'images']:
                 if field in v:
                     setattr(variant, field, v[field])
+            # A variant without its own artwork falls back to the product's, so
+            # ProductPage never renders with no image at all.
+            if not (variant.images or []):
+                variant.images = list(entry['images'] or [])
             variant.is_active = True
 
             for colour in (variant.colours or []):

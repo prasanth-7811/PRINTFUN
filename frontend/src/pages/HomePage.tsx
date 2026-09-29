@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Sparkles, Shield, Zap, Truck } from 'lucide-react'
 import { StarRating, Accordion } from '../components/ui/index'
 import { ContactSection } from '../components/studio/ContactSection'
-import { CURRENCY } from '../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
 import { productService } from '../services/products'
 import type { Product } from '../types'
 
@@ -30,7 +30,7 @@ function ProductCard({ product }: { product: Product }) {
   return (
     <div className="group bg-white rounded-2xl border border-zinc-100 overflow-hidden hover:shadow-lg transition-all duration-300">
       <div className="relative overflow-hidden aspect-square bg-zinc-50">
-        <img src={product.images?.[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+        <img src={product.images?.[0] || PLACEHOLDER_IMAGE} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
         {product.is_new && (
           <span className="absolute top-3 left-3 bg-black text-white text-xs font-semibold px-2.5 py-1 rounded-full">New</span>
         )}

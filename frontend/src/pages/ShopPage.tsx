@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Search, SlidersHorizontal, X, Heart, Eye } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
-import { CURRENCY } from '../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
 import { productService } from '../services/products'
 import type { Product, Audience } from '../types'
 
@@ -231,7 +231,7 @@ export default function ShopPage() {
                 {filtered.map(p => (
                   <div key={p.id} className="group bg-white rounded-2xl border border-zinc-100 overflow-hidden hover:shadow-lg transition-all duration-300">
                     <div className="relative aspect-square bg-zinc-50 overflow-hidden">
-                      <img src={p.images?.[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                      <img src={p.images?.[0] || PLACEHOLDER_IMAGE} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                       {p.is_new && <span className="absolute top-2 left-2 bg-black text-white text-xs font-semibold px-2 py-0.5 rounded-full">New</span>}
                       {p.coming_soon && (
                         <span className="absolute top-2 left-2 bg-amber-400 text-black text-xs font-semibold px-2 py-0.5 rounded-full">Coming Soon</span>

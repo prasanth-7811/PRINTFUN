@@ -19,6 +19,10 @@ export const BRAND = {
 const _VITE_API_URL = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_URL
 export const API_BASE = _VITE_API_URL || '/api'
 
+// Placeholder used wherever a product has no image yet. Keeping it local means
+// the storefront never hot-links a third-party CDN for a missing thumbnail.
+export const PLACEHOLDER_IMAGE = '/products/placeholder.svg'
+
 export const CURRENCY = '₹'
 
 export const PRINT_AREA = {

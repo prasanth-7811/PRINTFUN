@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Heart, ShieldCheck, Truck, RotateCcw, Star } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
-import { CURRENCY, BRAND } from '../config/brand'
+import { CURRENCY, BRAND, PLACEHOLDER_IMAGE } from '../config/brand'
 import { productService } from '../services/products'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -119,9 +119,7 @@ export default function ProductPage() {
           {/* Images */}
           <div className="space-y-3">
             <div className="aspect-square rounded-2xl overflow-hidden bg-zinc-50">
-              {images?.[activeImage] && (
-                <img src={images[activeImage]} alt={product.name} className="w-full h-full object-cover" />
-              )}
+              <img src={images?.[activeImage] || PLACEHOLDER_IMAGE} alt={product.name} className="w-full h-full object-cover" />
             </div>
             {images && images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../contexts/CartContext'
 import { orderService } from '../services/orders'
-import { CURRENCY } from '../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
 import type { Address } from '../types'
 
 const STATES = ['Andhra Pradesh','Assam','Bihar','Delhi','Goa','Gujarat','Haryana','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Odisha','Punjab','Rajasthan','Tamil Nadu','Telangana','Uttar Pradesh','West Bengal']
@@ -161,7 +161,7 @@ export default function CheckoutPage() {
               {items.map(item => (
                 <div key={item.id} className="flex gap-3">
                   <div className="w-12 h-12 rounded-lg bg-zinc-100 overflow-hidden shrink-0">
-                    <img src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=100&q=80'} alt="" className="w-full h-full object-cover" />
+                    <img src={item.product?.images?.[0] || PLACEHOLDER_IMAGE} alt="" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-zinc-900 truncate">{item.product?.name || 'Custom T-Shirt'}</p>

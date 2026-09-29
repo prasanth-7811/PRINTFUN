@@ -115,7 +115,15 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', '86400'))  # 24 hours
     MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+    # Vercel's Python runtime mounts the function read-only, so a local upload
+    # folder cannot persist anything. Fall back to the OS temp dir there; with
+    # AWS_S3 unset uploads are only useful in dev anyway.
+    _default_uploads = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'uploads')
+    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', _default_uploads)
+    if not os.access(os.path.dirname(UPLOAD_FOLDER) or '.', os.W_OK):
+        UPLOAD_FOLDER = os.path.join(
+            os.environ.get('TMPDIR', '/tmp'), 'teezo-uploads')
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
     SQLALCHEMY_ENGINE_OPTIONS = _engine_options(SQLALCHEMY_DATABASE_URI)
     # Supabase's pooler only — the listeners are registered in create_app().

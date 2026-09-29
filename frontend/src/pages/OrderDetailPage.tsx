@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Truck, CheckCircle, Clock, MessageCircle } from 'lucide-react'
 import { orderService } from '../services/orders'
 import type { Order, OrderStatus } from '../types'
-import { CURRENCY } from '../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
 import { STORE_WHATSAPP_DISPLAY, orderEnquiryLink } from '../utils/whatsapp'
 
 const TIMELINE: { status: OrderStatus; label: string }[] = [
@@ -103,7 +103,7 @@ export default function OrderDetailPage() {
               {order.items.map(item => (
                 <div key={item.id} className="flex gap-3">
                   <div className="w-14 h-14 rounded-xl bg-zinc-100 overflow-hidden shrink-0">
-                    <img src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=100&q=80'} alt="" className="w-full h-full object-cover" />
+                    <img src={item.product?.images?.[0] || PLACEHOLDER_IMAGE} alt="" className="w-full h-full object-cover" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-zinc-900">{item.product?.name}</p>

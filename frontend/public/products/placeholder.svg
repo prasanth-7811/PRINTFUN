@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" role="img" aria-label="Product image coming soon">
+  <rect width="600" height="600" fill="#f4f4f5"/>
+  <g fill="none" stroke="#d4d4d8" stroke-width="3">
+    <rect x="150" y="140" width="300" height="320" rx="28"/>
+    <path d="M150 220c60-40 90-40 150 0s90 40 150 0"/>
+    <path d="M255 140c15 30 75 30 90 0"/>
+  </g>
+  <text x="300" y="520" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="26" font-weight="600" fill="#a1a1aa">Image coming soon</text>
+</svg>

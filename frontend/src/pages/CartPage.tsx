@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Trash2, Edit2, ShoppingBag, Tag, ArrowRight } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
-import { CURRENCY } from '../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
 import api from '../services/api'
 
 export default function CartPage() {
@@ -59,7 +59,7 @@ export default function CartPage() {
               <div key={item.id} className="bg-white rounded-2xl border border-zinc-100 p-5">
                 <div className="flex gap-4">
                   <div className="w-20 h-20 rounded-xl bg-zinc-100 overflow-hidden shrink-0">
-                    <img src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=200&q=80'} alt="" className="w-full h-full object-cover" />
+                    <img src={item.product?.images?.[0] || PLACEHOLDER_IMAGE} alt="" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">

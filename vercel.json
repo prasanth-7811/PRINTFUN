@@ -1,12 +1,17 @@
 {
-  "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "cd frontend && npm install",
-  "framework": null,
+  "functions": {
+    "backend/app.py": {
+      "runtime": "@vercel/python@latest",
+      "excludeFiles": "{backend/venv/**,backend/.venv/**,backend/__pycache__/**,backend/**/__pycache__/**,backend/instance/**,backend/tests/**,backend/*.log,backend/*.err,frontend/**}"
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/uploads/(.*)", "destination": "/uploads/$1" },
+    { "source": "/((?!api|uploads).*)", "destination": "/index.html" }
   ]
 }
-
