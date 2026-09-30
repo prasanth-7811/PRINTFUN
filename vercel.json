@@ -4,29 +4,13 @@
   "outputDirectory": "frontend/dist",
   "installCommand": "cd frontend && npm install",
   "functions": {
-    "backend/app.py": {
+    "api/index.py": {
       "runtime": "@vercel/python@latest",
-      "maxDuration": 30,
-      "excludeFiles": "{backend/venv/**,backend/.venv/**,backend/__pycache__/**,backend/**/__pycache__/**,backend/instance/**,backend/tests/**,backend/*.log,backend/*.err,backend/*.db,frontend/**}"
+      "maxDuration": 30
     }
   },
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/app.py"
-    },
-    {
-      "src": "/uploads/(.*)",
-      "dest": "/backend/app.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html",
-      "status": 200
-    }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.py" },
+    { "source": "/((?!api).*)", "destination": "/index.html" }
   ]
 }
