@@ -1,10 +1,13 @@
 import sys
 import os
 
-# Add the backend directory to Python path so all imports work correctly.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+# The api/ directory sits at the repo root; backend/ is one level up from here.
+_here = os.path.dirname(os.path.abspath(__file__))
+_backend = os.path.join(_here, '..', 'backend')
+sys.path.insert(0, os.path.abspath(_backend))
 
 from app import create_app
 
-# Vercel looks for a module-level `app` WSGI callable.
+# Vercel invokes this as a serverless function.
+# The module-level `app` variable must be a WSGI callable.
 app = create_app()
