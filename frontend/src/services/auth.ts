@@ -32,9 +32,7 @@ export const authService = {
     return res.data as {
       message: string
       user: User
-      email_sent: boolean
-      delivery: string
-      verification_link?: string | null
+      token: string
     }
   },
 

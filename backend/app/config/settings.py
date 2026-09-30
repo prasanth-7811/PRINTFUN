@@ -52,10 +52,11 @@ def _is_pooled(uri):
 def _engine_options(uri):
     """SQLAlchemy engine options for the configured database.
 
-    Supabase closes idle connections after ~30s and restarts its compute
-    frequently, so always check a pooled connection is still alive before use
-    and recycle it before Supabase does.
+    SQLite needs no pool options. For Supabase/PostgreSQL we add health checks
+    and recycle idle connections before Supabase closes them.
     """
+    if uri.startswith('sqlite'):
+        return {}
     options = {'pool_pre_ping': True, 'pool_recycle': 20}
     if not _is_pooled(uri):
         return options

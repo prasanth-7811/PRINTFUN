@@ -80,39 +80,23 @@ def register():
     if errors:
         return jsonify({'message': 'Please fix the errors below.', 'errors': errors}), 400
 
+    # Accounts are verified on creation — email verification is not required, so
+    # the user can sign in immediately with the credentials they just set.
     user = User(
         name=name, email=email, phone=phone,
         password_hash=User.hash_password(password),
-        role='customer', email_verified=False,
+        role='customer', email_verified=True,
     )
     db.session.add(user)
     db.session.flush()
-
-    raw, token_hash = AuthToken.generate()
-    token = AuthToken(
-        user_id=user.id, purpose='verify_email', token_hash=token_hash,
-        expires_at=datetime.utcnow() + AuthToken.VERIFICATION_TTL,
-    )
-    db.session.add(token)
+    user.last_login = datetime.utcnow()
     db.session.commit()
 
-    delivered = 'none'
-    dev_link = None
-    try:
-        delivered = send_verification_email(user, raw)
-    except MailError:
-        # Do not leak provider details; surface a neutral failure.
-        return jsonify({'message': 'Account created, but we could not send the '
-                                    'verification email. Please try resending.'}), 201
-    if current_app.config.get('DEV_RETURN_TOKEN'):
-        dev_link = f"{current_app.config['FRONTEND_URL']}/verify-email?token={raw}"
-
+    # Hand back a session token so registration logs the user straight in.
     return jsonify({
-        'message': 'Your account has been created! Please verify your email address to continue.',
+        'message': 'Your account has been created! You are now signed in.',
         'user': user.to_dict(),
-        'email_sent': delivered != 'none',
-        'delivery': delivered,
-        'verification_link': dev_link,
+        'token': _issue_token(user),
     }), 201
 
 

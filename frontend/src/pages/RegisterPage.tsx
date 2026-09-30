@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { AuthLayout, FormField, PasswordField, PasswordStrength, SubmitButton } from '../components/auth/AuthFields'
 import type { AuthErrorResponse } from '../services/auth'
@@ -49,8 +48,8 @@ export default function RegisterPage() {
         confirm_password: form.confirm,
         accept_terms: acceptTerms,
       })
-      // Account created unverified — verify the email first, then the phone.
-      navigate(`/verify-email?email=${encodeURIComponent(form.email.toLowerCase())}&next=verify-phone`)
+      // Account is verified and signed in on creation — go straight to the app.
+      navigate('/')
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       setServerError(body?.message || 'Registration failed. Please try again.')

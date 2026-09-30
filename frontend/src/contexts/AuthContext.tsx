@@ -72,8 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (data: Parameters<typeof authService.register>[0]) => {
     setLoading(true)
     try {
-      // The account is created unverified — no session is returned here.
-      await authService.register(data)
+      // Registration verifies the account and returns a session token, so the
+      // new user is signed in immediately.
+      const res = await authService.register(data)
+      persist(res.token, res.user)
+      await cartService.getCart().catch(() => {})
     } finally {
       setLoading(false)
     }
