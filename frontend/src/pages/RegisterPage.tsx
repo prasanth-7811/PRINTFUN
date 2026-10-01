@@ -49,7 +49,7 @@ export default function RegisterPage() {
         accept_terms: acceptTerms,
       })
       // Account is verified and signed in on creation — go straight to the app.
-      navigate('/')
+      navigate('/?welcome=1')
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       setServerError(body?.message || 'Registration failed. Please try again.')

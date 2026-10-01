@@ -1,11 +1,12 @@
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Sparkles, Shield, Zap, Truck } from 'lucide-react'
-import { StarRating, Accordion } from '../components/ui/index'
+import { StarRating, Accordion, Toast } from '../components/ui/index'
 import { ContactSection } from '../components/studio/ContactSection'
 import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
 import { productService } from '../services/products'
 import type { Product } from '../types'
+import { useState } from 'react'
 
 const REVIEWS = [
   { name: 'Arjun Mehta', rating: 5, text: 'Absolutely love the quality! The print came out crisp and the fabric feels premium. Will definitely order again.', verified: true },
@@ -61,12 +62,18 @@ function ProductCard({ product }: { product: Product }) {
 }
 
 export default function HomePage() {
+  const [searchParams] = useSearchParams()
+  const [toast, setToast] = useState(
+    searchParams.get('welcome') === '1' ? 'Account created! Welcome to PRINTHEAVEN 🎉' :
+    searchParams.get('loggedin') === '1' ? 'Welcome back! You are now logged in ✓' : ''
+  )
   const { data: featured = [] } = useQuery({
     queryKey: ['featured-products'],
     queryFn: productService.getFeatured,
   })
   return (
     <div className="bg-white">
+      {toast && <Toast message={toast} type="success" onClose={() => setToast('')} />}
       {/* Hero */}
       <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-zinc-950">
         <div className="absolute inset-0">

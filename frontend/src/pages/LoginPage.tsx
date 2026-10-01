@@ -24,7 +24,7 @@ export default function LoginPage() {
     setNeedsVerification(false)
     try {
       await login(email, password, remember)
-      navigate(redirect)
+      navigate(redirect + (redirect === '/' ? '?loggedin=1' : ''))
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       if (body?.verification_required) {
