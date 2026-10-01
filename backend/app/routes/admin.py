@@ -303,6 +303,135 @@ def update_settings():
     return jsonify({'message': 'Settings saved'})
 
 
+@admin_bp.route('/seed', methods=['POST'])
+@admin_required
+def seed_products():
+    from ..models import Product, ProductVariant, Inventory, Design, Coupon
+    from datetime import datetime, timedelta
+
+    C = {
+        'Royal Blue': '#2563eb', 'Maroon': '#7f1d1d', 'Navy': '#1e3a5f',
+        'Olive Green': '#556b2f', 'Black': '#1a1a1a', 'White': '#f5f5f5',
+        'Mustard': '#d9a020', 'Orange': '#ea580c', 'Cream': '#f5ead6',
+        'Lavender': '#c8b6e2', 'Pastel Pink': '#f3c6d6', 'Pastel Mint': '#bfe8d2',
+        'Light Brown': '#b08968', 'Half White': '#eee9e0',
+    }
+
+    def colours(*names):
+        return [{'name': n, 'hex': C[n]} for n in names]
+
+    ADULT_SIZES = ['S', 'M', 'L', 'XL', '2XL']
+
+    CATALOG = [
+        {
+            'name': 'Round Neck T-Shirt', 'slug': 'round-neck-t-shirt',
+            'type': 'Round Neck', 'audiences': ['kids', 'adults'],
+            'description': 'Everyday round neck tees in combed cotton and poly cotton.',
+            'images': ['/products/round-neck.png'],
+            'variants': [
+                {'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck', 'audience': 'adults', 'price': 170, 'fabric': '100% RL Combed Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+                {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton', 'audience': 'adults', 'price': 95, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 180, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+                {'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/round-neck.png']},
+            ],
+        },
+        {
+            'name': 'Polo T-Shirt', 'slug': 'polo-t-shirt',
+            'type': 'Polo', 'audiences': ['kids', 'adults'],
+            'description': 'Premium polos in pique, polyester and acid-wash finishes.',
+            'images': ['/products/polo.png'],
+            'variants': [
+                {'name': 'Premium Polo T-Shirt', 'slug': 'premium-polo', 'audience': 'adults', 'price': 270, 'fabric': '100% RL Combed Cotton', 'material': 'Pique', 'gsm': 240, 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+                {'name': 'Polyester Mars Polo T-Shirt', 'slug': 'polyester-mars-polo', 'audience': 'adults', 'price': 180, 'fabric': '100% Polyester Mars', 'material': 'Polyester Mars', 'gsm': 200, 'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+                {'name': 'Acid Wash Polo T-Shirt', 'slug': 'acid-wash-polo', 'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 220, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+                {'name': 'Polo T-Shirt — Kids', 'slug': 'polo-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/polo.png']},
+            ],
+        },
+        {
+            'name': 'Oversized T-Shirt', 'slug': 'oversized-t-shirt',
+            'type': 'Oversized', 'audiences': ['kids', 'adults'],
+            'description': 'Drop-shoulder oversized fits in French Terry, poly cotton and acid wash.',
+            'images': ['/products/oversized.png'],
+            'variants': [
+                {'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry', 'audience': 'adults', 'price': 240, 'fabric': '100% RL Combed Cotton', 'material': 'French Terry', 'gsm': 240, 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink', 'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
+                {'name': 'Oversized T-Shirt — Poly Cotton', 'slug': 'oversized-poly-cotton', 'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 240, 'colours': colours('Maroon', 'White', 'Black', 'Navy', 'Half White'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
+                {'name': 'Acid Wash Oversized T-Shirt', 'slug': 'acid-wash-oversized', 'audience': 'adults', 'price': 280, 'fabric': '100% RL Combed Cotton', 'material': '100% RL Combed Cotton', 'gsm': 240, 'colours': colours('Olive Green', 'White', 'Maroon', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
+                {'name': 'Oversized T-Shirt — Kids', 'slug': 'oversized-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/oversized.png']},
+            ],
+        },
+        {
+            'name': 'Hoodies', 'slug': 'hoodies',
+            'type': 'Hoodies', 'audiences': ['adults'],
+            'description': 'Heavyweight loopknit-raised hoodies. Adults only.',
+            'images': ['/products/hoodie.png'],
+            'variants': [
+                {'name': 'Regular Hoodie', 'slug': 'regular-hoodie', 'audience': 'adults', 'price': 400, 'fabric': '100% Cotton', 'material': 'Loopknit Raised', 'gsm': 300, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
+                {'name': 'Acid Wash Hoodie', 'slug': 'acid-wash-hoodie', 'audience': 'adults', 'price': 440, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
+            ],
+        },
+    ]
+
+    def _union_colours(variants):
+        seen = {}
+        for v in variants:
+            for c in (v.get('colours') or []):
+                seen.setdefault(c['name'], c['hex'])
+        return [{'name': k, 'hex': v} for k, v in seen.items()]
+
+    created = 0
+    updated = 0
+    for entry in CATALOG:
+        product = Product.query.filter_by(slug=entry['slug']).first()
+        priced = [v for v in entry['variants'] if v.get('price') is not None]
+        if product is None:
+            product = Product(
+                name=entry['name'], slug=entry['slug'], type=entry['type'],
+                description=entry['description'], images=entry['images'],
+                audiences=entry['audiences'], fit='Regular Fit',
+                base_price=min(v['price'] for v in priced),
+                gsm=max([v['gsm'] for v in entry['variants'] if v.get('gsm')], default=None),
+                fabric=next((v['fabric'] for v in entry['variants'] if v.get('fabric')), None),
+                colours=_union_colours(entry['variants']),
+                sizes=ADULT_SIZES, is_active=True, is_new=True, is_featured=True,
+            )
+            db.session.add(product)
+            db.session.flush()
+            created += 1
+        else:
+            product.images = entry['images']
+            product.audiences = entry['audiences']
+            product.base_price = min(v['price'] for v in priced)
+            product.colours = _union_colours(entry['variants'])
+            product.is_active = True
+            updated += 1
+
+        for v in entry['variants']:
+            variant = ProductVariant.query.filter_by(product_id=product.id, slug=v['slug']).first()
+            if variant is None:
+                variant = ProductVariant(product_id=product.id, name=v['name'], slug=v['slug'], audience=v['audience'])
+                db.session.add(variant)
+                db.session.flush()
+            for field in ['name', 'price', 'fabric', 'material', 'gsm', 'colours', 'sizes', 'images']:
+                if field in v:
+                    setattr(variant, field, v[field])
+            variant.is_active = True
+            for colour in (variant.colours or []):
+                for size in (variant.sizes or []):
+                    if not Inventory.query.filter_by(product_id=product.id, variant_id=variant.id, colour=colour['name'], size=size).first():
+                        db.session.add(Inventory(product_id=product.id, variant_id=variant.id, colour=colour['name'], size=size, stock=25))
+
+    # Seed coupons
+    COUPONS = [
+        {'code': 'WELCOME10', 'type': 'percentage', 'value': 10, 'min_order': 499, 'expiry': datetime.utcnow() + timedelta(days=365)},
+        {'code': 'FLAT100', 'type': 'flat', 'value': 100, 'min_order': 999, 'expiry': datetime.utcnow() + timedelta(days=180)},
+    ]
+    for c_data in COUPONS:
+        if not Coupon.query.filter_by(code=c_data['code']).first():
+            db.session.add(Coupon(**c_data))
+
+    db.session.commit()
+    return jsonify({'message': f'Seeded successfully', 'created': created, 'updated': updated})
+
+
 @admin_bp.route('/analytics', methods=['GET'])
 @admin_required
 def get_analytics():

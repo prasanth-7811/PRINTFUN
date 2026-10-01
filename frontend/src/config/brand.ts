@@ -1,27 +1,17 @@
-// Brand configuration — change brand name here only.
-// Every value here is consumed by mail templates, the footer, the navbar and
-// the email footer, so keep it as the single source of truth.
+// Brand configuration — change brand name here only
 export const BRAND = {
   name: 'PRINTHEAVEN',
   tagline: 'Design It. Wear It. Make It Yours.',
-  email: 'hello@printheaven.co.in',
-  phone: '9600650612',
-  whatsapp: '9600650612',
+  wemail: 'hello@printheaven.com',
+  phone: '6369794482',
+  whatsapp: '6369794482',
   address: 'Chennai, Tamil Nadu, India',
   instagram: 'https://instagram.com/printheaven',
   facebook: 'https://facebook.com/printheaven',
   youtube: 'https://youtube.com/@printheaven',
 } as const
 
-// API base URL. `import.meta.env` is a Vite injection that is undefined under
-// plain Node (e.g. when running the link smoke check), so read it defensively;
-// behaviour under Vite is unchanged.
-const _VITE_API_URL = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_URL
-export const API_BASE = _VITE_API_URL || '/api'
-
-// Placeholder used wherever a product has no image yet. Keeping it local means
-// the storefront never hot-links a third-party CDN for a missing thumbnail.
-export const PLACEHOLDER_IMAGE = '/products/placeholder.svg'
+export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export const CURRENCY = '₹'
 
@@ -36,11 +26,4 @@ export const PRICING = {
   deliveryBase: 79,
   deliveryPerExtra: 20,
   freeDeliveryAbove: 999,
-}
-
-// Sender identity used by the backend's email templates. Mirrors the
-// MAIL_FROM / SUPPORT_EMAIL env vars — keep both in sync when rebranding.
-export const MAIL = {
-  from: `${BRAND.name} <noreply@${BRAND.name.toLowerCase()}.com>`,
-  support: BRAND.email,
 }
