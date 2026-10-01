@@ -303,6 +303,29 @@ def update_settings():
     return jsonify({'message': 'Settings saved'})
 
 
+@admin_bp.route('/reset', methods=['POST'])
+def reset_database():
+    """Wipe all data and recreate tables. Protected by setup key."""
+    data = request.get_json(silent=True) or {}
+    if data.get('key') != 'printheaven-setup-2024':
+        return jsonify({'message': 'Invalid setup key'}), 403
+
+    db.drop_all()
+    db.create_all()
+
+    admin = User(
+        name='Admin',
+        email='admin@printheaven.co.in',
+        password_hash=User.hash_password('admin123'),
+        role='admin',
+        email_verified=True,
+        token_version=1,
+    )
+    db.session.add(admin)
+    db.session.commit()
+    return jsonify({'message': 'All data wiped. Fresh database ready. Admin user recreated.'})
+
+
 @admin_bp.route('/setup', methods=['POST'])
 def setup_database():
     """One-time endpoint to create all tables and seed the admin user.
