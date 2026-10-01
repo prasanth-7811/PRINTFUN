@@ -9,8 +9,8 @@
       "maxDuration": 30
     }
   },
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.py" },
-    { "source": "/((?!api).*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.py", "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"] },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
