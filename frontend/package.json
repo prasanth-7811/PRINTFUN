@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "vercel-build": "tsc -b && vite build",
     "check:whatsapp": "node --experimental-strip-types --no-warnings src/utils/__whatsapp_check.ts"
   },
   "dependencies": {
