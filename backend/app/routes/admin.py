@@ -310,23 +310,30 @@ def reset_database():
     if data.get('key') != 'printheaven-setup-2024':
         return jsonify({'message': 'Invalid setup key'}), 403
 
-    from ..models import (ProductVariant, Inventory, CartItem, WishlistItem,
-                          Review, Notification, AuthToken, Address,
-                          OrderItem, OrderStatusHistory, Order, Enquiry)
+    from ..models import (CartItem, WishlistItem, Review, Notification,
+                          AuthToken, Address, OrderItem, OrderStatusHistory,
+                          Order, Enquiry)
+    from sqlalchemy import text
 
-    # Delete in FK dependency order
-    AuthToken.query.delete(synchronize_session=False)
-    CartItem.query.delete(synchronize_session=False)
-    WishlistItem.query.delete(synchronize_session=False)
-    Review.query.delete(synchronize_session=False)
-    Notification.query.delete(synchronize_session=False)
-    Address.query.delete(synchronize_session=False)
-    Enquiry.query.delete(synchronize_session=False)
-    OrderItem.query.delete(synchronize_session=False)
-    OrderStatusHistory.query.delete(synchronize_session=False)
-    Order.query.delete(synchronize_session=False)
-    User.query.delete(synchronize_session=False)
-    db.session.commit()
+    try:
+        # Use TRUNCATE with CASCADE on Postgres for a clean wipe
+        db.session.execute(text('TRUNCATE TABLE auth_tokens, cart_items, wishlist_items, reviews, notifications, addresses, enquiries, order_items, order_status_history, orders, users RESTART IDENTITY CASCADE'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # Fallback: manual delete in FK order
+        AuthToken.query.delete(synchronize_session=False)
+        CartItem.query.delete(synchronize_session=False)
+        WishlistItem.query.delete(synchronize_session=False)
+        Review.query.delete(synchronize_session=False)
+        Notification.query.delete(synchronize_session=False)
+        Address.query.delete(synchronize_session=False)
+        Enquiry.query.delete(synchronize_session=False)
+        OrderItem.query.delete(synchronize_session=False)
+        OrderStatusHistory.query.delete(synchronize_session=False)
+        Order.query.delete(synchronize_session=False)
+        User.query.delete(synchronize_session=False)
+        db.session.commit()
 
     # Recreate admin user
     admin = User(
