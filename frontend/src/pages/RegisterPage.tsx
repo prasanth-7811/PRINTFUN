@@ -40,7 +40,7 @@ export default function RegisterPage() {
     if (!validate()) return
 
     try {
-      await register({
+      const res = await register({
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
@@ -48,8 +48,8 @@ export default function RegisterPage() {
         confirm_password: form.confirm,
         accept_terms: acceptTerms,
       })
-      // Account is verified and signed in on creation — go straight to the app.
-      navigate('/?welcome=1')
+      const email = res?.email || form.email.trim().toLowerCase()
+      navigate(`/verify-email?email=${encodeURIComponent(email)}`)
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       setServerError(body?.message || 'Registration failed. Please try again.')

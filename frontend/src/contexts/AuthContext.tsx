@@ -15,7 +15,7 @@ interface AuthContextType {
     password: string
     confirm_password?: string
     accept_terms?: boolean
-  }) => Promise<void>
+  }) => Promise<{ verification_required?: boolean; email?: string }>
   logout: () => void
   refresh: () => Promise<void>
   updateProfile: (data: Partial<User>) => Promise<void>
@@ -72,11 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (data: Parameters<typeof authService.register>[0]) => {
     setLoading(true)
     try {
-      // Registration verifies the account and returns a session token, so the
-      // new user is signed in immediately.
       const res = await authService.register(data)
-      persist(res.token, res.user)
-      await cartService.getCart().catch(() => {})
+      // If verification is required, don't persist a session — just return the response.
+      if (res.token && res.user) {
+        persist(res.token, res.user)
+        await cartService.getCart().catch(() => {})
+      }
+      return res
     } finally {
       setLoading(false)
     }
