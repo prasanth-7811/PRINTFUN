@@ -6,9 +6,13 @@
     "api/index.py": {
       "runtime": "@vercel/python@latest",
       "maxDuration": 30
+    },
+    "api/test.py": {
+      "runtime": "@vercel/python@latest"
     }
   },
   "rewrites": [
+    { "source": "/api/test", "destination": "/api/test.py" },
     { "source": "/api/:path*", "destination": "/api/index.py" },
     { "source": "/:path*", "destination": "/index.html" }
   ]
