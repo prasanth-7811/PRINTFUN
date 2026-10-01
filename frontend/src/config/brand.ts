@@ -2,6 +2,7 @@
 export const BRAND = {
   name: 'PRINTHEAVEN',
   tagline: 'Design It. Wear It. Make It Yours.',
+  email: 'hello@printheaven.com',
   wemail: 'hello@printheaven.com',
   phone: '6369794482',
   whatsapp: '6369794482',
@@ -10,6 +11,8 @@ export const BRAND = {
   facebook: 'https://facebook.com/printheaven',
   youtube: 'https://youtube.com/@printheaven',
 } as const
+
+export const PLACEHOLDER_IMAGE = '/products/placeholder.svg'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
