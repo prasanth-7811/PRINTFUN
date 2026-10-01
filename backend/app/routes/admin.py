@@ -303,6 +303,36 @@ def update_settings():
     return jsonify({'message': 'Settings saved'})
 
 
+@admin_bp.route('/setup', methods=['POST'])
+def setup_database():
+    """One-time endpoint to create all tables and seed the admin user.
+    Protected by a setup key to prevent abuse.
+    """
+    from flask import current_app
+    data = request.get_json(silent=True) or {}
+    setup_key = data.get('key') or ''
+    if setup_key != 'printheaven-setup-2024':
+        return jsonify({'message': 'Invalid setup key'}), 403
+
+    db.create_all()
+
+    # Create admin user if not exists
+    if not User.query.filter_by(email='admin@printheaven.co.in').first():
+        admin = User(
+            name='Admin',
+            email='admin@printheaven.co.in',
+            password_hash=User.hash_password('admin123'),
+            role='admin',
+            email_verified=True,
+            token_version=1,
+        )
+        db.session.add(admin)
+        db.session.commit()
+        return jsonify({'message': 'Database setup complete. Admin user created.'})
+
+    return jsonify({'message': 'Database already set up.'})
+
+
 @admin_bp.route('/seed', methods=['POST'])
 @admin_required
 def seed_products():
