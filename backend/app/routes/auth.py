@@ -96,19 +96,23 @@ def register():
     db.session.commit()
 
     dev_link = None
+    mail_error = None
     try:
         send_verification_email(user, raw)
-    except MailError:
-        pass
+    except MailError as exc:
+        mail_error = str(exc)
     if current_app.config.get('DEV_RETURN_TOKEN'):
         dev_link = f"{current_app.config['FRONTEND_URL']}/verify-email?token={raw}"
 
-    return jsonify({
+    resp = {
         'message': 'Account created! Please check your email to verify your address.',
         'verification_required': True,
         'email': user.email,
         'verification_link': dev_link,
-    }), 201
+    }
+    if mail_error:
+        resp['mail_error'] = mail_error
+    return jsonify(resp), 201
 
 
 @auth_bp.route('/verify-email', methods=['POST'])

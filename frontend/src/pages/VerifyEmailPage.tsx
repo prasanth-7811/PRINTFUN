@@ -37,8 +37,8 @@ export default function VerifyEmailPage() {
       // The backend returns a session token so the user is signed in already.
       localStorage.setItem('token', res.token)
       localStorage.setItem('user', JSON.stringify(res.user))
-      // Registration hands off here when a phone number still needs verifying.
-      setTimeout(() => navigate(next ? `/${next.replace(/^\//, '')}` : '/'), 2200)
+      // After email verification, go to phone verification next.
+      setTimeout(() => navigate(next ? `/${next.replace(/^\//, '')}` : '/verify-phone'), 2200)
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       setState({

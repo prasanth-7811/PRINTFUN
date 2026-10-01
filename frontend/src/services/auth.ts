@@ -31,8 +31,13 @@ export const authService = {
     const res = await api.post('/auth/register', data)
     return res.data as {
       message: string
-      user: User
-      token: string
+      verification_required: boolean
+      email: string
+      verification_link?: string | null
+      mail_error?: string
+      // legacy: only present if email_verified=True path is ever restored
+      user?: User
+      token?: string
     }
   },
 
