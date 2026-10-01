@@ -2,17 +2,7 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "pip install -r requirements.txt && cd frontend && npm install",
-  "functions": {
-    "api/index.py": {
-      "runtime": "@vercel/python@3.0.0",
-      "maxDuration": 30
-    },
-    "api/test.py": {
-      "runtime": "@vercel/python@3.0.0"
-    }
-  },
   "rewrites": [
-    { "source": "/api/test", "destination": "/api/test.py" },
     { "source": "/api/:path*", "destination": "/api/index.py" },
     { "source": "/:path*", "destination": "/index.html" }
   ]
