@@ -305,25 +305,29 @@ def update_settings():
 
 @admin_bp.route('/reset', methods=['POST'])
 def reset_database():
-    """Wipe all data and recreate tables. Protected by setup key."""
+    """Wipe catalog/session data only — users and orders are preserved."""
     data = request.get_json(silent=True) or {}
     if data.get('key') != 'printheaven-setup-2024':
         return jsonify({'message': 'Invalid setup key'}), 403
 
-    db.drop_all()
-    db.create_all()
+    from ..models import (ProductVariant, Inventory, Design, Coupon,
+                          CartItem, WishlistItem, Review, Notification, AuthToken)
+    from sqlalchemy import text
 
-    admin = User(
-        name='Admin',
-        email='admin@printheaven.co.in',
-        password_hash=User.hash_password('admin123'),
-        role='admin',
-        email_verified=True,
-        token_version=1,
-    )
-    db.session.add(admin)
+    # Clear in dependency order to avoid FK violations
+    Inventory.query.delete(synchronize_session=False)
+    CartItem.query.delete(synchronize_session=False)
+    WishlistItem.query.delete(synchronize_session=False)
+    Review.query.delete(synchronize_session=False)
+    Notification.query.delete(synchronize_session=False)
+    AuthToken.query.delete(synchronize_session=False)
+    ProductVariant.query.delete(synchronize_session=False)
+    Design.query.delete(synchronize_session=False)
+    Coupon.query.delete(synchronize_session=False)
+    Product.query.delete(synchronize_session=False)
     db.session.commit()
-    return jsonify({'message': 'All data wiped. Fresh database ready. Admin user recreated.'})
+
+    return jsonify({'message': 'Catalog data wiped. Users and orders preserved.'})
 
 
 @admin_bp.route('/setup', methods=['POST'])
