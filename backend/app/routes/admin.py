@@ -349,6 +349,91 @@ def reset_database():
     return jsonify({'message': 'All user data wiped. Catalog preserved. Admin user recreated.'})
 
 
+@admin_bp.route('/schema', methods=['GET'])
+def get_schema():
+    """Returns the database schema — tables, columns, relationships and constraints."""
+    return jsonify({
+        'database': 'PostgreSQL (Supabase)',
+        'tables': {
+            'users': {
+                'primary_key': 'id',
+                'columns': ['id', 'name', 'email', 'phone', 'password_hash', 'role',
+                            'is_active', 'avatar', 'email_verified', 'phone_verified',
+                            'last_login', 'token_version', 'created_at', 'updated_at'],
+                'constraints': ['email UNIQUE', 'email_verified NOT NULL', 'role DEFAULT customer'],
+                'relationships': ['has_many orders', 'has_many cart_items', 'has_many addresses',
+                                  'has_many reviews', 'has_many auth_tokens'],
+            },
+            'products': {
+                'primary_key': 'id',
+                'columns': ['id', 'name', 'slug', 'type', 'description', 'material', 'fit',
+                            'base_price', 'images', 'colours', 'sizes', 'rating', 'review_count',
+                            'is_featured', 'is_new', 'is_active', 'audiences', 'gsm', 'fabric'],
+                'constraints': ['slug UNIQUE', 'base_price NOT NULL'],
+                'relationships': ['has_many product_variants', 'has_many inventory', 'has_many reviews'],
+            },
+            'product_variants': {
+                'primary_key': 'id',
+                'columns': ['id', 'product_id', 'name', 'slug', 'audience', 'price',
+                            'fabric', 'material', 'gsm', 'colours', 'sizes', 'images', 'is_active'],
+                'constraints': ['UNIQUE(product_id, slug)', 'audience IN (kids, adults)'],
+                'relationships': ['belongs_to product', 'has_many inventory'],
+            },
+            'inventory': {
+                'primary_key': 'id',
+                'columns': ['id', 'product_id', 'variant_id', 'colour', 'size', 'stock'],
+                'constraints': ['UNIQUE(product_id, colour, size, variant_id)', 'stock >= 0'],
+                'relationships': ['belongs_to product', 'belongs_to product_variant'],
+            },
+            'orders': {
+                'primary_key': 'id',
+                'columns': ['id', 'order_number', 'user_id', 'status', 'subtotal', 'delivery',
+                            'discount', 'total', 'payment_status', 'payment_method',
+                            'address_snapshot', 'tracking_id', 'courier', 'created_at'],
+                'constraints': ['order_number UNIQUE', 'status DEFAULT placed'],
+                'relationships': ['belongs_to user', 'has_many order_items', 'has_many order_status_history'],
+            },
+            'order_items': {
+                'primary_key': 'id',
+                'columns': ['id', 'order_id', 'product_id', 'product_snapshot', 'colour',
+                            'sizes', 'front_design', 'back_design', 'base_price', 'total'],
+                'relationships': ['belongs_to order', 'belongs_to product'],
+            },
+            'auth_tokens': {
+                'primary_key': 'id',
+                'columns': ['id', 'user_id', 'purpose', 'token_hash', 'expires_at', 'used_at'],
+                'constraints': ['token_hash UNIQUE', 'purpose IN (verify_email, reset_password, verify_phone)'],
+                'relationships': ['belongs_to user'],
+            },
+            'addresses': {
+                'primary_key': 'id',
+                'columns': ['id', 'user_id', 'full_name', 'phone', 'line1', 'line2',
+                            'area', 'city', 'state', 'pincode', 'gst', 'is_default'],
+                'relationships': ['belongs_to user'],
+            },
+            'cart_items': {
+                'primary_key': 'id',
+                'columns': ['id', 'user_id', 'product_id', 'variant_id', 'colour', 'sizes',
+                            'front_design', 'back_design', 'base_price', 'total'],
+                'relationships': ['belongs_to user', 'belongs_to product'],
+            },
+            'reviews': {
+                'primary_key': 'id',
+                'columns': ['id', 'user_id', 'product_id', 'order_id', 'rating', 'text',
+                            'is_verified', 'is_approved', 'created_at'],
+                'constraints': ['rating BETWEEN 1 AND 5'],
+                'relationships': ['belongs_to user', 'belongs_to product'],
+            },
+            'coupons': {
+                'primary_key': 'id',
+                'columns': ['id', 'code', 'type', 'value', 'min_order', 'max_uses',
+                            'used_count', 'expiry', 'is_active'],
+                'constraints': ['code UNIQUE', 'type IN (percentage, flat)'],
+            },
+        },
+    })
+
+
 @admin_bp.route('/setup', methods=['POST'])
 def setup_database():
     """One-time endpoint to create all tables and seed the admin user.

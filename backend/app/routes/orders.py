@@ -1,3 +1,4 @@
+import re
 import random
 import string
 from flask import Blueprint, request, jsonify
@@ -10,21 +11,39 @@ from ..utils.whatsapp import (send_new_order_alert, send_order_confirmation,
 
 orders_bp = Blueprint('orders', __name__)
 
+VALID_PAYMENT_METHODS = ('upi', 'card', 'netbanking', 'cod', 'wallet')
+VALID_STATUSES = ('placed', 'confirmed', 'design_review', 'design_approved',
+                  'printing', 'quality_check', 'packed', 'shipped',
+                  'out_for_delivery', 'delivered', 'cancelled', 'returned',
+                  'return_requested', 'refund_requested')
+
 
 def generate_order_number():
     suffix = ''.join(random.choices(string.digits, k=6))
-    return f"TZ-2024-{suffix}"
+    return f"PH-2024-{suffix}"
 
 
 @orders_bp.route('', methods=['POST'])
 @jwt_required()
 def create_order():
     user_id = get_jwt_identity()
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
     cart_items = CartItem.query.filter_by(user_id=user_id).all()
     if not cart_items:
-        return jsonify({'message': 'Cart is empty'}), 400
+        return jsonify({'message': 'Your cart is empty.'}), 400
+
+    address = data.get('address')
+    if not address or not isinstance(address, dict):
+        return jsonify({'message': 'Delivery address is required.'}), 400
+    addr_required = ['full_name', 'phone', 'line1', 'city', 'state', 'pincode']
+    missing = [f for f in addr_required if not address.get(f)]
+    if missing:
+        return jsonify({'message': f'Address missing: {", ".join(missing)}.'}), 400
+
+    payment_method = data.get('payment_method', 'upi')
+    if payment_method not in VALID_PAYMENT_METHODS:
+        return jsonify({'message': f'Invalid payment method. Choose from: {', '.join(VALID_PAYMENT_METHODS)}.'}), 400
 
     subtotal = sum(float(i.base_price + i.front_print_cost + i.back_print_cost) *
                    sum(v for v in i.sizes.values() if v > 0) for i in cart_items)
@@ -42,9 +61,9 @@ def create_order():
         discount=discount,
         total=total,
         payment_status='paid',
-        payment_method=data.get('payment_method', 'upi'),
-        address_snapshot=data.get('address'),
-        special_instructions=data.get('special_instructions'),
+        payment_method=payment_method,
+        address_snapshot=address,
+        special_instructions=(data.get('special_instructions') or '')[:500] or None,
     )
     db.session.add(order)
     db.session.flush()
@@ -200,10 +219,12 @@ def update_order_status(order_id):
     from ..utils.auth import get_current_user
     admin = get_current_user()
     order = Order.query.get_or_404(order_id)
-    data = request.get_json()
-    new_status = data.get('status')
+    data = request.get_json(silent=True) or {}
+    new_status = (data.get('status') or '').strip()
     if not new_status:
-        return jsonify({'message': 'Status required'}), 400
+        return jsonify({'message': 'Status is required.'}), 400
+    if new_status not in VALID_STATUSES:
+        return jsonify({'message': f'Invalid status. Valid values: {', '.join(VALID_STATUSES)}.'}), 400
 
     order.status = new_status
     if data.get('tracking_id'):

@@ -21,22 +21,39 @@ def get_reviews():
 @jwt_required()
 def create_review():
     user_id = get_jwt_identity()
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
-    # Only allow reviews for delivered orders
+    errors = {}
+    product_id = data.get('product_id')
+    rating = data.get('rating')
+    text = (data.get('text') or '').strip()
+
+    if not product_id:
+        errors['product_id'] = 'Product is required.'
+    elif not Product.query.get(product_id):
+        errors['product_id'] = 'Product not found.'
+    if rating is None:
+        errors['rating'] = 'Rating is required.'
+    elif not isinstance(rating, int) or not (1 <= rating <= 5):
+        errors['rating'] = 'Rating must be a whole number between 1 and 5.'
+    if text and len(text) > 1000:
+        errors['text'] = 'Review text must be 1000 characters or fewer.'
+    if errors:
+        return jsonify({'message': 'Please fix the errors below.', 'errors': errors}), 400
+
     delivered = Order.query.filter_by(user_id=user_id, status='delivered').first()
     if not delivered:
-        return jsonify({'message': 'You can only review products from delivered orders'}), 403
+        return jsonify({'message': 'You can only review products from delivered orders.'}), 403
 
-    existing = Review.query.filter_by(user_id=user_id, product_id=data['product_id']).first()
+    existing = Review.query.filter_by(user_id=user_id, product_id=product_id).first()
     if existing:
-        return jsonify({'message': 'You have already reviewed this product'}), 409
+        return jsonify({'message': 'You have already reviewed this product.'}), 409
 
     review = Review(
         user_id=user_id,
-        product_id=data['product_id'],
-        rating=data['rating'],
-        text=data.get('text'),
+        product_id=product_id,
+        rating=rating,
+        text=text or None,
         image=data.get('image'),
         is_verified=True,
         is_approved=False,
@@ -50,9 +67,9 @@ def create_review():
 @admin_required
 def moderate_review(review_id):
     review = Review.query.get_or_404(review_id)
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if 'is_approved' in data:
-        review.is_approved = data['is_approved']
+        review.is_approved = bool(data['is_approved'])
     db.session.commit()
     return jsonify(review.to_dict())
 
@@ -63,4 +80,4 @@ def delete_review(review_id):
     review = Review.query.get_or_404(review_id)
     db.session.delete(review)
     db.session.commit()
-    return jsonify({'message': 'Deleted'})
+    return jsonify({'message': 'Review deleted'})
