@@ -5,15 +5,20 @@ const rateLimit = require('express-rate-limit')
 const connectDB = require('./config/db')
 const errorHandler = require('./middleware/errorHandler')
 
-const app = express()
+let dbConnected = false
 
-// ── Database ──────────────────────────────────────────────────────────────────
-connectDB()
+const app = express()
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
+
+// Lazy DB connect — reuses connection across serverless invocations
+app.use(async (req, res, next) => {
+  if (!dbConnected) { await connectDB(); dbConnected = true }
+  next()
+})
 
 // Rate limiting on auth endpoints
 const authLimiter = rateLimit({
@@ -23,13 +28,13 @@ const authLimiter = rateLimit({
 })
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api/auth', authLimiter, require('./routes/auth'))
-app.use('/api/users', require('./routes/users'))
-app.use('/api/products', require('./routes/products'))
-app.use('/api/orders', require('./routes/orders'))
+app.use('/api/node/auth', authLimiter, require('./routes/auth'))
+app.use('/api/node/users', require('./routes/users'))
+app.use('/api/node/products', require('./routes/products'))
+app.use('/api/node/orders', require('./routes/orders'))
 
 // Health check
-app.get('/api/health', (req, res) =>
+app.get('/api/node/health', (req, res) =>
   res.json({ status: 'ok', service: 'printheaven-node-api', db: 'mongodb' })
 )
 
@@ -39,6 +44,10 @@ app.use((req, res) => res.status(404).json({ message: 'Route not found.' }))
 // Global error handler
 app.use(errorHandler)
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5001
-app.listen(PORT, () => console.log(`Node server running on port ${PORT}`))
+// Local dev server
+if (require.main === module) {
+  const PORT = process.env.PORT || 5001
+  connectDB().then(() => app.listen(PORT, () => console.log(`Node server running on port ${PORT}`)))
+}
+
+module.exports = app
