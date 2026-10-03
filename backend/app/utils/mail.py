@@ -206,6 +206,28 @@ def send_verification_email(user, raw_token):
     )
 
 
+def send_otp_email(to_addr, name, otp):
+    body = (
+        '<p style="margin:0 0 4px;font-size:15px;color:#27272a;line-height:1.6;">'
+        'Use the code below to verify your email address and complete your registration.</p>'
+        '<div style="margin:20px 0;text-align:center;">'
+        f'<span style="font-size:36px;font-weight:900;letter-spacing:.2em;color:#0a0a0a;'
+        'background:#f4f4f5;padding:16px 28px;border-radius:12px;display:inline-block;">'
+        f'{otp}</span></div>'
+        '<p style="margin:0;font-size:13px;color:#71717a;line-height:1.6;">'
+        'Enter this code on the registration page. Do not share it with anyone.</p>'
+    )
+    note = ('<p style="margin:20px 0 0;font-size:12px;color:#a1a1aa;">'
+            '⏱ This code expires in 10 minutes and can only be used once.</p>')
+    return send_email(
+        to_addr,
+        'Your PRINTHEAVEN Verification Code',
+        _layout(name, body, note),
+        text=(f'Hi {name},\n\nYour PRINTHEAVEN verification code is: {otp}\n\n'
+              'This code expires in 10 minutes and can only be used once.'),
+    )
+
+
 def send_password_reset_email(user, raw_token):
     url = f'{_frontend_base()}/reset-password?token={raw_token}'
     body = (

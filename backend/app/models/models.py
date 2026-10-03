@@ -440,8 +440,8 @@ class AuthToken(db.Model):
     """
     __tablename__ = 'auth_tokens'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    purpose = db.Column(db.String(20), nullable=False, index=True)  # verify_email | reset_password
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    purpose = db.Column(db.String(20), nullable=False, index=True)  # verify_email | reset_password | verify_email_otp
     token_hash = db.Column(db.String(256), unique=True, nullable=False, index=True)
     expires_at = db.Column(db.DateTime, nullable=False, index=True)
     used_at = db.Column(db.DateTime)

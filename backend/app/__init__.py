@@ -42,6 +42,7 @@ def create_app(config_name=None):
     from .routes.wishlist import wishlist_bp
     from .routes.notifications import notifications_bp
     from .routes.addresses import addresses_bp
+    from .routes.users import users_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(phone_bp, url_prefix='/api/phone')
@@ -56,6 +57,7 @@ def create_app(config_name=None):
     app.register_blueprint(wishlist_bp, url_prefix='/api/wishlist')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(addresses_bp, url_prefix='/api/addresses')
+    app.register_blueprint(users_bp, url_prefix='/api/users')
 
     @app.errorhandler(404)
     def not_found(e):

@@ -1,4 +1,5 @@
 import re
+import secrets
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import (create_access_token, jwt_required,
@@ -7,7 +8,7 @@ from sqlalchemy import func
 from ..extensions import db, limiter
 from ..models import User, AuthToken
 from ..utils.auth import get_current_user
-from ..utils.mail import send_verification_email, send_password_reset_email, MailError
+from ..utils.mail import send_verification_email, send_password_reset_email, send_otp_email, MailError
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -47,6 +48,123 @@ def _issue_token(user, include_claims=True):
 
 def _token_ok(user, claims):
     return user is not None and claims.get('tv') == user.token_version
+
+
+OTP_TTL_MINUTES = 10
+OTP_MAX_ATTEMPTS = 5
+
+
+@auth_bp.route('/send-email-otp', methods=['POST'])
+@limiter.limit('5 per minute')
+def send_email_otp():
+    """Step 1: validate email uniqueness and send a 6-digit OTP."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    name = (data.get('name') or 'there').strip()
+
+    if not EMAIL_RE.match(email):
+        return jsonify({'message': 'Enter a valid email address.', 'field': 'email'}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({'message': 'An account with this email already exists.', 'field': 'email'}), 400
+
+    # Invalidate any previous unused OTPs for this email.
+    AuthToken.query.filter_by(purpose='verify_email_otp').filter(
+        AuthToken.phone == email, AuthToken.used_at.is_(None)
+    ).update({'used_at': datetime.utcnow()})
+
+    otp = str(secrets.randbelow(900000) + 100000)  # 6-digit
+    otp_hash = bcrypt.hashpw(otp.encode(), bcrypt.gensalt()).decode()
+
+    db.session.add(AuthToken(
+        user_id=None,  # no user yet — email stored in phone column as identifier
+        purpose='verify_email_otp',
+        token_hash=otp_hash,
+        phone=email,
+        expires_at=datetime.utcnow() + timedelta(minutes=OTP_TTL_MINUTES),
+    ))
+    db.session.commit()
+
+    try:
+        send_otp_email(email, name, otp)
+    except MailError as exc:
+        return jsonify({'message': f'Failed to send OTP: {exc}'}), 500
+
+    return jsonify({
+        'message': f'A 6-digit verification code has been sent to {email}.',
+        'email': email,
+        'expires_in': OTP_TTL_MINUTES * 60,
+    })
+
+
+@auth_bp.route('/verify-email-otp', methods=['POST'])
+@limiter.limit('10 per minute')
+def verify_email_otp():
+    """Step 2: verify OTP then create the account."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    otp = (data.get('otp') or '').strip()
+    name = (data.get('name') or '').strip()
+    phone = (data.get('phone') or '').strip()
+    password = data.get('password') or ''
+    confirm = data.get('confirm_password') or data.get('confirm') or ''
+    accepted = bool(data.get('accept_terms', data.get('terms', False)))
+
+    if not email or not otp:
+        return jsonify({'message': 'Email and OTP are required.'}), 400
+
+    # Find the latest unused OTP token for this email.
+    token = AuthToken.query.filter_by(
+        purpose='verify_email_otp', used_at=None,
+    ).filter(AuthToken.phone == email).order_by(AuthToken.created_at.desc()).first()
+
+    if token is None:
+        return jsonify({'message': 'No active OTP found. Please request a new code.'}), 400
+    if token.is_expired:
+        return jsonify({'message': 'OTP has expired. Please request a new code.', 'expired': True}), 410
+    if token.otp_attempts >= OTP_MAX_ATTEMPTS:
+        return jsonify({'message': 'Too many incorrect attempts. Please request a new code.'}), 429
+
+    if not bcrypt.checkpw(otp.encode(), token.token_hash.encode()):
+        token.otp_attempts = (token.otp_attempts or 0) + 1
+        db.session.commit()
+        remaining = OTP_MAX_ATTEMPTS - token.otp_attempts
+        return jsonify({'message': f'Incorrect code. {remaining} attempt(s) remaining.'}), 400
+
+    # OTP is valid — now validate registration fields.
+    errors = {}
+    if not name or len(name) < 2:
+        errors['name'] = 'Please enter your full name.'
+    if phone and not PHONE_RE.match(phone):
+        errors['phone'] = 'Enter a valid mobile number.'
+    pw_error = _validate_password(password)
+    if pw_error:
+        errors['password'] = pw_error
+    elif password != confirm:
+        errors['confirm_password'] = 'Passwords do not match.'
+    if not accepted:
+        errors['accept_terms'] = 'You must accept the Terms & Conditions.'
+    if errors:
+        return jsonify({'message': 'Please fix the errors below.', 'errors': errors}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({'message': 'An account with this email already exists.', 'field': 'email'}), 400
+
+    # Mark OTP as used and create the verified user.
+    token.used_at = datetime.utcnow()
+
+    user = User(
+        name=name, email=email, phone=phone or None,
+        password_hash=User.hash_password(password),
+        role='customer', email_verified=True, is_active=True,
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify({
+        'message': 'Account created successfully!',
+        'user': user.to_dict(),
+        'token': _issue_token(user),
+    }), 201
 
 
 @auth_bp.route('/register', methods=['POST'])

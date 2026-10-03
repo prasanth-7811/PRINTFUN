@@ -213,6 +213,24 @@ def admin_get_orders():
     })
 
 
+@orders_bp.route('/admin/<int:order_id>', methods=['GET'])
+@admin_required
+def admin_get_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    return jsonify(order.to_dict())
+
+
+@orders_bp.route('/admin/<int:order_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    if order.status not in ('cancelled', 'returned'):
+        return jsonify({'message': 'Only cancelled or returned orders can be deleted.'}), 400
+    db.session.delete(order)
+    db.session.commit()
+    return jsonify({'message': 'Order deleted.'})
+
+
 @orders_bp.route('/admin/<int:order_id>/status', methods=['PUT'])
 @admin_required
 def update_order_status(order_id):
