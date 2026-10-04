@@ -6,7 +6,10 @@ from ..models import User
 
 def get_current_user():
     user_id = get_jwt_identity()
-    return User.query.get(user_id)
+    try:
+        return User.query.get(int(user_id))
+    except (TypeError, ValueError):
+        return None
 
 
 def roles_required(*roles):
