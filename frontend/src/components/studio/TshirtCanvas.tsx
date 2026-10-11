@@ -81,7 +81,7 @@ export default function TshirtCanvas({
     ctx.strokeStyle = '#e5e7eb'
     ctx.lineWidth = 1.5
 
-    const W = canvas.width, H = canvas.height
+    const W = cssW, H = cssH
     ctx.beginPath()
     ctx.moveTo(W * 0.22, H * 0.08)
     ctx.quadraticCurveTo(W * 0.5, H * 0.18, W * 0.78, H * 0.08)
@@ -275,10 +275,12 @@ export default function TshirtCanvas({
       const dx = pos.x - resizeStart.x
       const dy = pos.y - resizeStart.y
 
-      // Determine width delta based on which corner is dragged
-      let dw = 0
-      if (corner === 'br' || corner === 'tr') dw = dx
-      else dw = -dx  // bl or tl: dragging left increases width
+      // Use both axes: pick whichever gives larger delta, respecting corner direction
+      const xSign = (corner === 'br' || corner === 'tr') ? 1 : -1
+      const ySign = (corner === 'br' || corner === 'bl') ? 1 : -1
+      const dwFromX = dx * xSign
+      const dwFromY = dy * ySign * aspect
+      const dw = Math.abs(dwFromX) >= Math.abs(dwFromY) ? dwFromX : dwFromY
 
       let nw = Math.max(20, sw + dw)
       let nh = nw / aspect
