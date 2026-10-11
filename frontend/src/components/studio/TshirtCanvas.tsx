@@ -34,7 +34,7 @@ export default function TshirtCanvas({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizing, setResizing] = useState(false)
   const [resizeStart, setResizeStart] = useState({
-    x: 0, y: 0, w: 0, h: 0, ox: 0, oy: 0, aspect: 1,
+    x: 0, y: 0, w: 0, h: 0, ox: 0, oy: 0, aspect: 1, corner: 'br',
   })
   const [rotating, setRotating] = useState(false)
   const [rotateStart, setRotateStart] = useState({ x: 0, y: 0, angle: 0 })
@@ -60,6 +60,18 @@ export default function TshirtCanvas({
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    // HiDPI / Retina: scale canvas buffer to device pixel ratio for sharp rendering.
+    const dpr = window.devicePixelRatio || 1
+    const cssW = 400
+    const cssH = 480
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+      canvas.width = cssW * dpr
+      canvas.height = cssH * dpr
+      canvas.style.width = `${cssW}px`
+      canvas.style.height = `${cssH}px`
+      ctx.scale(dpr, dpr)
+    }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -161,8 +173,9 @@ export default function TshirtCanvas({
 
   const getPos = (e: React.MouseEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect()
-    const scaleX = canvasRef.current!.width / rect.width
-    const scaleY = canvasRef.current!.height / rect.height
+    // Use CSS pixel coordinates — the canvas ctx is already scaled by DPR internally.
+    const scaleX = 400 / rect.width
+    const scaleY = 480 / rect.height
     return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }
   }
 
@@ -185,6 +198,20 @@ export default function TshirtCanvas({
     const nearX = Math.abs(pos.x - l) < 12 || Math.abs(pos.x - r) < 12
     const nearY = Math.abs(pos.y - t) < 12 || Math.abs(pos.y - b) < 12
     return nearX && nearY
+  }
+
+  const getResizeCorner = (pos: { x: number; y: number }, d: CanvasDesign) => {
+    const l = d.x - 4, r = d.x + d.width + 4
+    const t = d.y - 4, b = d.y + d.height + 4
+    const nearL = Math.abs(pos.x - l) < 12
+    const nearR = Math.abs(pos.x - r) < 12
+    const nearT = Math.abs(pos.y - t) < 12
+    const nearB = Math.abs(pos.y - b) < 12
+    if (nearR && nearB) return 'br'
+    if (nearL && nearB) return 'bl'
+    if (nearR && nearT) return 'tr'
+    if (nearL && nearT) return 'tl'
+    return null
   }
 
   const isOnRotateHandle = (pos: { x: number; y: number }, d: CanvasDesign) => {
@@ -214,11 +241,12 @@ export default function TshirtCanvas({
       const aspect = hit.originalWidth && hit.originalHeight
         ? hit.originalWidth / hit.originalHeight
         : hit.width / hit.height
+      const corner = getResizeCorner(pos, hit) || 'br'
       setResizeStart({
         x: pos.x, y: pos.y,
         w: hit.width, h: hit.height,
         ox: hit.x, oy: hit.y,
-        aspect,
+        aspect, corner,
       })
     } else if (isOnRotateHandle(pos, hit)) {
       setRotating(true)
@@ -243,39 +271,32 @@ export default function TshirtCanvas({
       const clamped = clampToPrintArea(nx, ny, d.width, d.height)
       onUpdate(selectedId, clamped)
     } else if (resizing) {
-      const { aspect, ox, oy, w: sw, h: sh } = resizeStart
-      // Scale by how far the pointer is from the design's centre, versus at drag start.
-      // This keeps the behaviour correct no matter which corner handle is dragged.
-      const cx0 = ox + sw / 2
-      const cy0 = oy + sh / 2
-      const dist0 = Math.hypot(resizeStart.x - cx0, resizeStart.y - cy0)
-      const dist = Math.hypot(pos.x - cx0, pos.y - cy0)
-      const scale = dist0 > 0 ? dist / dist0 : 1
-      let nw = Math.max(20, sw * scale)
+      const { aspect, ox, oy, w: sw, h: sh, corner } = resizeStart
+      const dx = pos.x - resizeStart.x
+      const dy = pos.y - resizeStart.y
+
+      // Determine width delta based on which corner is dragged
+      let dw = 0
+      if (corner === 'br' || corner === 'tr') dw = dx
+      else dw = -dx  // bl or tl: dragging left increases width
+
+      let nw = Math.max(20, sw + dw)
       let nh = nw / aspect
 
-      // Never exceed the printable area.
+      // Cap to print area
       const area = PRINT_AREA
-      if (nw > area.width || nh > area.height) {
-        if (nw / area.width > nh / area.height) {
-          nw = area.width
-          nh = nw / aspect
-        } else {
-          nh = area.height
-          nw = nh * aspect
-        }
-      }
+      if (nw > area.width) { nw = area.width; nh = nw / aspect }
+      if (nh > area.height) { nh = area.height; nw = nh * aspect }
 
-      // Grow from the centre so the artwork stays anchored where the user placed it.
-      const nx = ox + (sw - nw) / 2
-      const ny = oy + (sh - nh) / 2
+      // Anchor the opposite corner
+      let nx = ox, ny = oy
+      if (corner === 'br') { nx = ox; ny = oy }
+      else if (corner === 'bl') { nx = ox + sw - nw; ny = oy }
+      else if (corner === 'tr') { nx = ox; ny = oy + sh - nh }
+      else { nx = ox + sw - nw; ny = oy + sh - nh }  // tl
+
       const clamped = clampToPrintArea(nx, ny, nw, nh)
-      onUpdate(selectedId, {
-        width: clamped.width,
-        height: clamped.height,
-        x: clamped.x,
-        y: clamped.y,
-      })
+      onUpdate(selectedId, { width: clamped.width, height: clamped.height, x: clamped.x, y: clamped.y })
     } else if (rotating && onRotate) {
       const cx = d.x + d.width / 2
       const cy = d.y + d.height / 2
@@ -300,10 +321,8 @@ export default function TshirtCanvas({
   return (
     <canvas
       ref={canvasRef}
-      width={400}
-      height={480}
-      className="w-full max-w-sm mx-auto touch-none select-none"
-      style={{ maxHeight: '480px', cursor }}
+      className="w-full max-w-sm mx-auto touch-none select-none block"
+      style={{ cursor }}
       onMouseDown={onMouseDown}
       onMouseMove={(e) => { onMouseMove(e); setCursor(cursorFor(getPos(e))) }}
       onMouseUp={onMouseUp}

@@ -24,20 +24,23 @@ export const pxToCm = (view: StudioView, px: number) => px / pxPerCm(view)
 export const maxPrintSize = (view: StudioView) => PRINT_AREA_CM[view]
 
 // Fit an uploaded artwork (in original pixels) inside the printable area of the given
-// side, preserving its aspect ratio and centring it.
+// side, preserving its aspect ratio and centring it at a natural default size.
 export const fitDesignToArea = (
   view: StudioView,
   originalWidth: number,
   originalHeight: number,
 ) => {
   const area = PRINT_AREA_PX[view]
-  const pad = 6
-  const maxW = area.width - pad * 2
-  const maxH = area.height - pad * 2
   const aspect = originalWidth && originalHeight ? originalWidth / originalHeight : 1
 
-  let width = maxW
-  let height = width / aspect
+  // Default to 50% of the print area width so the image looks natural, not stretched.
+  const defaultW = area.width * 0.5
+  const defaultH = defaultW / aspect
+
+  // If even 50% is too tall, scale down to fit height.
+  const maxH = area.height * 0.5
+  let width = defaultW
+  let height = defaultH
   if (height > maxH) {
     height = maxH
     width = height * aspect
