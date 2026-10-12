@@ -10,8 +10,7 @@ import re
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
-from sqlalchemy import func
-from ..extensions import db, limiter
+from ..extensions import limiter, get_db
 from ..models import User, AuthToken
 from ..utils.auth import get_current_user
 from ..utils.sms import send_sms, SmsError
@@ -21,7 +20,6 @@ from ..utils.otp import (generate_otp, hash_otp, verify_tp_otp, normalize_phone,
 
 phone_bp = Blueprint('phone', __name__)
 
-# Indian mobile numbers: optional +91 / 0 prefix, then ten digits starting 6-9.
 INDIAN_MOBILE_RE = re.compile(r'^(\+91|0)?[6-9]\d{9}$')
 
 
@@ -38,24 +36,23 @@ def _issue_token(user):
 @phone_bp.route('/send-otp', methods=['POST'])
 @limiter.limit('3 per minute')
 def send_otp():
-    """Issue a code to the user's own number.
-
-    Accepts either the registered email (to look the number up) or the number
-    itself, but only ever sends to a number belonging to that account — the
-    endpoint can never be turned into a free SMS relay.
-    """
     data = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip().lower()
     phone = normalize_phone((data.get('phone') or '').strip())
     purpose = (data.get('purpose') or 'verify_phone').strip()
 
+    col = get_db()
     user = None
     if email:
-        user = User.query.filter(func.lower(User.email) == email).first()
+        user_doc = col['users'].find_one({'email': email})
+        if user_doc:
+            user = User(user_doc)
     if user is None and phone:
-        user = User.query.filter(func.lower(User.phone) == phone).first()
+        user_doc = col['users'].find_one({'phone': phone})
+        if user_doc:
+            user = User(user_doc)
+
     if user is None:
-        # Generic response — never reveal which of the two is registered.
         return jsonify({'message': 'If an account with that email or number '
                                    'exists, a verification code has been sent.',
                         'cooldown_seconds': OTP_RESEND_COOLDOWN_SECONDS}), 200
@@ -66,18 +63,16 @@ def send_otp():
         return jsonify({'message': 'Your account has no valid mobile number '
                                    'to send a code to.'}), 400
     if not user.is_active:
-        return jsonify({'message': 'Your account has been disabled. '
-                                   'Contact support.'}), 403
+        return jsonify({'message': 'Your account has been disabled. Contact support.'}), 403
 
     destination = f'+91{phone}'
 
-    # Throttle code generation per account and per destination number.
-    recent = AuthToken.query.filter(
-        AuthToken.user_id == user.id,
-        AuthToken.purpose == purpose,
-        AuthToken.last_otp_at >= datetime.utcnow() - timedelta(seconds=OTP_RESEND_COOLDOWN_SECONDS),
-    ).first()
-    if recent and not recent.is_used:
+    recent_doc = col['auth_tokens'].find_one({
+        'user_id': user.id,
+        'purpose': purpose,
+        'last_otp_at': {'$gte': datetime.utcnow() - timedelta(seconds=OTP_RESEND_COOLDOWN_SECONDS)},
+    })
+    if recent_doc and recent_doc.get('used_at') is None:
         return jsonify({'message': 'A code was sent recently. Please wait '
                                    'before requesting another.',
                         'retry_after': OTP_RESEND_COOLDOWN_SECONDS}), 429
@@ -85,20 +80,25 @@ def send_otp():
     raw, hashed = generate_otp()
     now = datetime.utcnow()
 
-    # One live code at a time; older codes of the same purpose are retired.
-    AuthToken.query.filter(
-        AuthToken.user_id == user.id, AuthToken.purpose == purpose,
-        AuthToken.used_at.is_(None),
-    ).update({'used_at': now})
-
-    token = AuthToken(
-        user_id=user.id, purpose=purpose, token_hash=hash_otp(raw),
-        phone=phone, phone_otp_hash=hashed,
-        expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
-        last_otp_at=now, phone_otp_last_sent_at=now,
+    col['auth_tokens'].update_many(
+        {'user_id': user.id, 'purpose': purpose, 'used_at': None},
+        {'$set': {'used_at': now}}
     )
-    db.session.add(token)
-    db.session.commit()
+
+    token_doc = {
+        'user_id': user.id,
+        'purpose': purpose,
+        'token_hash': hash_otp(raw),
+        'phone': phone,
+        'phone_otp_hash': hashed,
+        'phone_otp_attempts': 0,
+        'expires_at': now + timedelta(minutes=OTP_TTL_MINUTES),
+        'last_otp_at': now,
+        'phone_otp_last_sent_at': now,
+        'used_at': None,
+        'created_at': now,
+    }
+    col['auth_tokens'].insert_one(token_doc)
 
     delivered = 'none'
     try:
@@ -106,8 +106,7 @@ def send_otp():
                                            f'Valid for {OTP_TTL_MINUTES} minutes. '
                                            f'Do not share it with anyone.')
     except SmsError:
-        return jsonify({'message': 'We could not send the verification code. '
-                                   'Please try again.'}), 503
+        return jsonify({'message': 'We could not send the verification code. Please try again.'}), 503
 
     if current_app.config.get('DEV_RETURN_TOKEN'):
         return jsonify({'message': 'A verification code has been sent to your number.',
@@ -122,7 +121,6 @@ def send_otp():
 @phone_bp.route('/verify-otp', methods=['POST'])
 @limiter.limit('10 per minute')
 def verify_otp():
-    """Redeem a code. Marks the account's number verified and issues a session."""
     data = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip().lower()
     phone = normalize_phone((data.get('phone') or '').strip())
@@ -132,48 +130,50 @@ def verify_otp():
     if not raw:
         return jsonify({'message': 'Verification code is required.'}), 400
 
+    col = get_db()
     user = None
     if email:
-        user = User.query.filter(func.lower(User.email) == email).first()
+        user_doc = col['users'].find_one({'email': email})
+        if user_doc:
+            user = User(user_doc)
     if user is None and phone:
-        user = User.query.filter(func.lower(User.phone) == phone).first()
+        user_doc = col['users'].find_one({'phone': phone})
+        if user_doc:
+            user = User(user_doc)
+
     if user is None:
-        # Generic response — never reveal whether the account exists.
         return jsonify({'message': 'Invalid or expired verification code.'}), 400
 
-    token = AuthToken.query.filter(
-        AuthToken.user_id == user.id,
-        AuthToken.purpose == purpose,
-        AuthToken.used_at.is_(None),
-    ).order_by(AuthToken.created_at.desc()).first()
+    token_doc = col['auth_tokens'].find_one(
+        {'user_id': user.id, 'purpose': purpose, 'used_at': None},
+        sort=[('created_at', -1)]
+    )
 
-    if token is None:
+    if token_doc is None:
         return jsonify({'message': 'Invalid or expired verification code.'}), 400
 
-    if token.is_expired:
-        return jsonify({'message': 'This verification code has expired. '
-                                   'Request a new one.', 'expired': True}), 410
+    expires_at = token_doc.get('expires_at')
+    if expires_at and datetime.utcnow() >= expires_at:
+        return jsonify({'message': 'This verification code has expired. Request a new one.', 'expired': True}), 410
 
-    token.phone_otp_attempts = (token.phone_otp_attempts or 0) + 1
-    db.session.commit()
+    attempts = (token_doc.get('phone_otp_attempts') or 0) + 1
+    col['auth_tokens'].update_one({'_id': token_doc['_id']}, {'$set': {'phone_otp_attempts': attempts}})
 
-    if token.phone_otp_attempts > OTP_MAX_ATTEMPTS:
-        token.used_at = datetime.utcnow()
-        db.session.commit()
-        return jsonify({'message': 'Too many incorrect attempts. '
-                                   'Please request a new code.'}), 429
+    if attempts > OTP_MAX_ATTEMPTS:
+        col['auth_tokens'].update_one({'_id': token_doc['_id']}, {'$set': {'used_at': datetime.utcnow()}})
+        return jsonify({'message': 'Too many incorrect attempts. Please request a new code.'}), 429
 
-    if not verify_tp_otp(raw, token.phone_otp_hash or ''):
+    if not verify_tp_otp(raw, token_doc.get('phone_otp_hash') or ''):
         return jsonify({'mismatch': True,
                         'message': 'Incorrect verification code.',
-                        'attempts_remaining': max(0, OTP_MAX_ATTEMPTS
-                                                  - (token.phone_otp_attempts or 0))}), 401
+                        'attempts_remaining': max(0, OTP_MAX_ATTEMPTS - attempts)}), 401
 
-    token.used_at = datetime.utcnow()
-    user.phone_verified = True
-    # Verification must rotate sessions; every stale token dies too.
-    user.token_version = (user.token_version or 1) + 1
-    db.session.commit()
+    now = datetime.utcnow()
+    col['auth_tokens'].update_one({'_id': token_doc['_id']}, {'$set': {'used_at': now}})
+
+    user._doc['phone_verified'] = True
+    user._doc['token_version'] = (user.token_version or 1) + 1
+    user.save()
 
     return jsonify({
         'message': 'PHONE VERIFIED SUCCESSFULLY',
@@ -185,9 +185,7 @@ def verify_otp():
 @phone_bp.route('/status', methods=['GET'])
 @jwt_required()
 def phone_status():
-    """Report whether the current session's number is verified."""
     user = get_current_user()
     if user is None:
-        return jsonify({'message': 'Session is no longer valid. '
-                                   'Please sign in again.'}), 401
+        return jsonify({'message': 'Session is no longer valid. Please sign in again.'}), 401
     return jsonify(_user_response(user))
