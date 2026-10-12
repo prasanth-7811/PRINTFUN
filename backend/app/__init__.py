@@ -1,8 +1,9 @@
 import os
 from flask import Flask, jsonify
-from sqlalchemy import event
-from .extensions import db, jwt, migrate, cors, limiter
+from .extensions import jwt, cors, limiter
+import pymongo
 from .config.settings import config
+import app.extensions as _ext
 
 
 def create_app(config_name=None):
@@ -12,23 +13,22 @@ def create_app(config_name=None):
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-    db.init_app(app)
+    # --- MongoDB connection ---------------------------------------------------
+    _ext.mongo_client = pymongo.MongoClient(app.config['MONGO_URI'])
+    _ext.mongo_db = _ext.mongo_client[app.config['MONGO_DB_NAME']]
+
+    # Create indexes for performance & uniqueness
+    with app.app_context():
+        _create_indexes(_ext.mongo_db)
+
+    # --- Flask extensions ----------------------------------------------------
     jwt.init_app(app)
-    migrate.init_app(app, db)
     cors.init_app(app, resources={r'/api/*': {'origins': '*'}})
-    # Rate limiting guards every auth endpoint against brute-force attempts.
     limiter.storage_uri = app.config.get('RATELIMIT_STORAGE_URI', 'memory://')
     limiter.enabled = bool(app.config.get('RATELIMIT_ENABLED', True))
     limiter.init_app(app)
 
-    # Behind Supabase's PgBouncer pooler a connection is reused across
-    # unrelated requests, so session-level state (prepared statements, cursors,
-    # GUCs) must be cleared before it goes back. Registered once the engine
-    # exists; empty unless the URI is a pooled one.
-    for name, listener in (app.config.get('POOL_RESET_EVENTS') or {}).items():
-        with app.app_context():
-            event.listen(db.engine.pool, name, listener)
-
+    # --- Blueprints ----------------------------------------------------------
     from .routes.auth import auth_bp
     from .routes.phone import phone_bp
     from .routes.products import products_bp
@@ -76,3 +76,35 @@ def create_app(config_name=None):
         return jsonify({'status': 'ok', 'service': 'printheaven-api'})
 
     return app
+
+
+def _create_indexes(mdb):
+    """Create MongoDB indexes for all collections."""
+    mdb.users.create_index('email', unique=True)
+    mdb.users.create_index('email_verified')
+    mdb.users.create_index('phone_verified')
+
+    mdb.auth_tokens.create_index('token_hash', unique=True)
+    mdb.auth_tokens.create_index('user_id')
+    mdb.auth_tokens.create_index('purpose')
+    mdb.auth_tokens.create_index('expires_at')
+
+    mdb.products.create_index('slug', unique=True)
+    mdb.products.create_index('is_active')
+    mdb.products.create_index('is_featured')
+
+    mdb.product_variants.create_index('product_id')
+    mdb.product_variants.create_index('audience')
+
+    mdb.orders.create_index('order_number', unique=True)
+    mdb.orders.create_index('user_id')
+
+    mdb.cart_items.create_index('user_id')
+    mdb.wishlist_items.create_index('user_id')
+    mdb.reviews.create_index('product_id')
+    mdb.reviews.create_index('user_id')
+    mdb.addresses.create_index('user_id')
+    mdb.notifications.create_index('user_id')
+    mdb.coupons.create_index('code', unique=True)
+    mdb.designs.create_index('is_active')
+    mdb.inventory.create_index([('product_id', 1), ('variant_id', 1), ('colour', 1), ('size', 1)])

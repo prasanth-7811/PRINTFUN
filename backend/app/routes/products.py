@@ -1,10 +1,10 @@
 import os
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, abort
 from werkzeug.utils import secure_filename
-from ..extensions import db
 from ..models import Product, ProductVariant, Inventory
 from ..utils.auth import admin_required
 from ..utils.uploads import allowed_file
+from ..extensions import get_db
 
 products_bp = Blueprint('products', __name__)
 
@@ -24,50 +24,51 @@ def get_products():
     max_price = request.args.get('max_price', type=float)
     sort = request.args.get('sort', 'featured')
     include_inactive = request.args.get('include_inactive', '').lower() in ('1', 'true')
-    q = Product.query
-    if not include_inactive:
-        q = q.filter_by(is_active=True)
 
-    if search:
-        q = q.filter(Product.name.ilike(f'%{search}%'))
+    query = {}
+    if not include_inactive:
+        query['is_active'] = True
     if type_filter:
-        q = q.filter_by(type=type_filter)
+        query['type'] = type_filter
     if gsm:
         try:
-            q = q.filter(Product.gsm == int(gsm))
+            query['gsm'] = int(gsm)
         except ValueError:
             pass
-    if min_price is not None:
-        q = q.filter(Product.base_price >= min_price)
-    if max_price is not None:
-        q = q.filter(Product.base_price <= max_price)
+    if search:
+        query['name'] = {'$regex': search, '$options': 'i'}
+    if min_price is not None or max_price is not None:
+        price_q = {}
+        if min_price is not None:
+            price_q['$gte'] = min_price
+        if max_price is not None:
+            price_q['$lte'] = max_price
+        query['base_price'] = price_q
 
-    # audience / colour live in JSON columns, whose containment operators are not
-    # portable between SQLite and PostgreSQL, so match them in Python.
-    base = q.all()
+    all_products = Product.find_all(query)
+
+    # Post-filter JSON array fields (audience, colour)
     if audience:
-        base = [p for p in base if audience in (p.audiences or [])]
+        all_products = [p for p in all_products if audience in (p.audiences or [])]
     if colour:
-        base = [p for p in base
-                if any(c.get('name') == colour for c in (p.colours or []))]
+        all_products = [p for p in all_products
+                        if any(c.get('name') == colour for c in (p.colours or []))]
 
     if sort == 'price_asc':
-        base.sort(key=lambda p: p.base_price)
+        all_products.sort(key=lambda p: p.base_price)
     elif sort == 'price_desc':
-        base.sort(key=lambda p: p.base_price, reverse=True)
+        all_products.sort(key=lambda p: p.base_price, reverse=True)
     elif sort == 'rating':
-        base.sort(key=lambda p: p.rating, reverse=True)
+        all_products.sort(key=lambda p: p.rating, reverse=True)
     elif sort == 'newest':
-        base.sort(key=lambda p: p.created_at, reverse=True)
+        all_products.sort(key=lambda p: p.created_at, reverse=True)
     else:
-        # Featured first, ties broken by newest. Both sorts are stable, so the
-        # second pass preserves the newest-first ordering within each group.
-        base.sort(key=lambda p: p.created_at, reverse=True)
-        base.sort(key=lambda p: not p.is_featured)
+        all_products.sort(key=lambda p: p.created_at, reverse=True)
+        all_products.sort(key=lambda p: not p.is_featured)
 
-    total = len(base)
+    total = len(all_products)
     start = (page - 1) * per_page
-    page_items = base[start:start + per_page]
+    page_items = all_products[start:start + per_page]
     return jsonify({
         'items': [p.to_dict() for p in page_items],
         'total': total,
@@ -79,8 +80,7 @@ def get_products():
 
 @products_bp.route('/filters', methods=['GET'])
 def get_filters():
-    """Distinct filter facets across the active catalog."""
-    products = Product.query.filter_by(is_active=True).all()
+    products = Product.find_all({'is_active': True})
     types = sorted({p.type for p in products if p.type})
     gsm_values = sorted({p.gsm for p in products if p.gsm})
     colours = {}
@@ -99,30 +99,22 @@ def get_filters():
 @products_bp.route('/featured', methods=['GET'])
 def get_featured():
     LIMIT = 8
-    featured = (Product.query
-                .filter_by(is_active=True, is_featured=True)
-                .order_by(Product.created_at.desc())
-                .limit(LIMIT).all())
-    # The homepage collection preview should never be empty while the catalog
-    # has products, so top up with the most recent active products when fewer
-    # than LIMIT are explicitly featured. Explicitly featured products keep
-    # their priority at the front of the list.
+    all_products = Product.find_all({'is_active': True})
+    featured = [p for p in all_products if p.is_featured]
+    featured.sort(key=lambda p: p.created_at, reverse=True)
     if len(featured) < LIMIT:
         seen = {p.id for p in featured}
-        recent = (Product.query
-                  .filter_by(is_active=True)
-                  .order_by(Product.created_at.desc()).all())
-        for p in recent:
-            if p.id not in seen:
-                featured.append(p)
-                if len(featured) >= LIMIT:
-                    break
-    return jsonify([p.to_dict() for p in featured])
+        rest = sorted([p for p in all_products if p.id not in seen],
+                      key=lambda p: p.created_at, reverse=True)
+        featured.extend(rest[:LIMIT - len(featured)])
+    return jsonify([p.to_dict() for p in featured[:LIMIT]])
 
 
-@products_bp.route('/<int:product_id>', methods=['GET'])
+@products_bp.route('/<string:product_id>', methods=['GET'])
 def get_product(product_id):
-    product = Product.query.get_or_404(product_id)
+    product = Product.find_by_id(product_id)
+    if not product:
+        abort(404)
     return jsonify(product.to_dict())
 
 
@@ -131,7 +123,6 @@ def get_product(product_id):
 # ---------------------------------------------------------------------------
 
 def _save_images(files):
-    """Persist uploaded images and return their public URLs."""
     urls = []
     upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'products')
     os.makedirs(upload_dir, exist_ok=True)
@@ -151,138 +142,145 @@ def _apply_product_fields(product, data):
                   'colours', 'sizes', 'is_featured', 'is_new', 'is_active', 'tags',
                   'audiences', 'gsm', 'fabric', 'coming_soon']:
         if field in data:
-            setattr(product, field, data[field])
+            product._doc[field] = data[field]
     if 'base_price' in data and data['base_price'] is not None:
-        product.base_price = data['base_price']
+        product._doc['base_price'] = float(data['base_price'])
     if not product.slug:
-        product.slug = (data.get('name') or 'product').lower().replace(' ', '-')
+        product._doc['slug'] = (data.get('name') or 'product').lower().replace(' ', '-')
 
 
 @products_bp.route('', methods=['POST'])
 @admin_required
 def create_product():
     data = request.get_json()
-    product = Product(
+    product = Product.create(
         name=data['name'], slug=data.get('slug') or data['name'].lower().replace(' ', '-'),
         type=data['type'], base_price=data['base_price'],
     )
     _apply_product_fields(product, data)
-    db.session.add(product)
-    db.session.flush()
-    db.session.commit()
+    product.save()
     return jsonify(product.to_dict()), 201
 
 
-@products_bp.route('/<int:product_id>', methods=['PUT'])
+@products_bp.route('/<string:product_id>', methods=['PUT'])
 @admin_required
 def update_product(product_id):
-    product = Product.query.get_or_404(product_id)
+    product = Product.find_by_id(product_id)
+    if not product:
+        abort(404)
     data = request.get_json()
     _apply_product_fields(product, data)
-    db.session.commit()
+    product.save()
     return jsonify(product.to_dict())
 
 
-@products_bp.route('/<int:product_id>/upload', methods=['POST'])
+@products_bp.route('/<string:product_id>/upload', methods=['POST'])
 @admin_required
 def upload_product_images(product_id):
-    product = Product.query.get_or_404(product_id)
+    product = Product.find_by_id(product_id)
+    if not product:
+        abort(404)
     urls = _save_images(request.files.getlist('images'))
     images = list(product.images or [])
     images.extend(urls)
-    product.images = images
-    db.session.commit()
+    product._doc['images'] = images
+    product.save()
     return jsonify({'images': product.images})
 
 
-@products_bp.route('/<int:product_id>', methods=['DELETE'])
+@products_bp.route('/<string:product_id>', methods=['DELETE'])
 @admin_required
 def delete_product(product_id):
-    product = Product.query.get_or_404(product_id)
-    product.is_active = False
-    db.session.commit()
+    product = Product.find_by_id(product_id)
+    if not product:
+        abort(404)
+    product._doc['is_active'] = False
+    product.save()
     return jsonify({'message': 'Product deactivated'})
 
 
 # ---------------------------------------------------------------------------
-# Admin variant CRUD — kids/adults variants priced & sized independently
+# Variants
 # ---------------------------------------------------------------------------
 
 def _apply_variant_fields(variant, data):
     for field in ['name', 'slug', 'audience', 'fabric', 'material', 'gsm',
                   'colours', 'sizes', 'images', 'is_active', 'coming_soon']:
         if field in data:
-            setattr(variant, field, data[field])
+            variant._doc[field] = data[field]
     if 'price' in data:
-        variant.price = data['price'] if data['price'] not in (None, '') else None
+        variant._doc['price'] = data['price'] if data['price'] not in (None, '') else None
 
 
-@products_bp.route('/<int:product_id>/variants', methods=['POST'])
+@products_bp.route('/<string:product_id>/variants', methods=['POST'])
 @admin_required
 def create_variant(product_id):
-    product = Product.query.get_or_404(product_id)
+    product = Product.find_by_id(product_id)
+    if not product:
+        abort(404)
     data = request.get_json()
     audience = (data.get('audience') or 'adults').lower()
     if audience not in ALLOWED_AUDIENCES:
         return jsonify({'message': 'audience must be kids or adults'}), 400
 
-    variant = ProductVariant(
+    variant = ProductVariant.create(
         product_id=product.id,
         name=data.get('name') or product.name,
         slug=data.get('slug') or f"{product.slug}-{audience}",
         audience=audience,
     )
     _apply_variant_fields(variant, data)
-    db.session.add(variant)
-    db.session.flush()
+    variant.save()
 
-    # Seed inventory rows for every colour x size so stock is manageable from day one.
+    # Seed inventory for colour x size combos
+    col = get_db()['inventory']
     for colour in (variant.colours or []):
         for size in (variant.sizes or []):
-            if not Inventory.query.filter_by(
-                product_id=product.id, variant_id=variant.id,
-                colour=colour.get('name'), size=size,
-            ).first():
-                db.session.add(Inventory(
+            existing = col.find_one({
+                'product_id': product.id, 'variant_id': variant.id,
+                'colour': colour.get('name'), 'size': size,
+            })
+            if not existing:
+                Inventory.create(
                     product_id=product.id, variant_id=variant.id,
                     colour=colour.get('name'), size=size, stock=0,
-                ))
-    db.session.commit()
+                )
     return jsonify(variant.to_dict()), 201
 
 
-@products_bp.route('/variants/<int:variant_id>', methods=['PUT'])
+@products_bp.route('/variants/<string:variant_id>', methods=['PUT'])
 @admin_required
 def update_variant(variant_id):
-    variant = ProductVariant.query.get_or_404(variant_id)
+    variant = ProductVariant.find_by_id(variant_id)
+    if not variant:
+        abort(404)
     data = request.get_json()
-    for field in ['name', 'slug', 'audience', 'fabric', 'material', 'gsm',
-                  'colours', 'sizes', 'images', 'is_active', 'coming_soon']:
-        if field in data:
-            setattr(variant, field, data[field])
-    if 'price' in data:
-        variant.price = data['price'] if data['price'] not in (None, '') else None
+    _apply_variant_fields(variant, data)
 
-    # Keep inventory rows in sync with the configured colours/sizes.
+    # Sync inventory rows
     wanted = {(c.get('name'), s) for c in (variant.colours or []) for s in (variant.sizes or [])}
-    existing = {(i.colour, i.size): i for i in variant.inventory}
-    for key, inv in existing.items():
+    inv_col = get_db()['inventory']
+    existing_docs = list(inv_col.find({'variant_id': variant.id}))
+    existing = {(d['colour'], d['size']): d for d in existing_docs}
+
+    for key, doc in existing.items():
         if key not in wanted:
-            db.session.delete(inv)
+            inv_col.delete_one({'_id': doc['_id']})
     for colour, size in wanted:
         if (colour, size) not in existing:
-            db.session.add(Inventory(
+            Inventory.create(
                 product_id=variant.product_id, variant_id=variant.id,
                 colour=colour, size=size, stock=0,
-            ))
-    db.session.commit()
+            )
+    variant.save()
     return jsonify(variant.to_dict())
 
 
-@products_bp.route('/variants/<int:variant_id>', methods=['DELETE'])
+@products_bp.route('/variants/<string:variant_id>', methods=['DELETE'])
 @admin_required
 def delete_variant(variant_id):
-    variant = ProductVariant.query.get_or_404(variant_id)
-    db.session.delete(variant)
-    db.session.commit()
+    variant = ProductVariant.find_by_id(variant_id)
+    if not variant:
+        abort(404)
+    variant.delete()
     return jsonify({'message': 'Variant deleted'})

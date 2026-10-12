@@ -1,8 +1,8 @@
 import re
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, abort
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..extensions import db
 from ..models import Address
+from ..extensions import get_db
 
 addresses_bp = Blueprint('addresses', __name__)
 
@@ -32,8 +32,8 @@ def _validate_address(data, partial=False):
 @jwt_required()
 def get_addresses():
     user_id = get_jwt_identity()
-    addresses = Address.query.filter_by(user_id=user_id).order_by(
-        Address.is_default.desc(), Address.created_at.desc()).all()
+    addresses = Address.find_by_user(user_id)
+    addresses.sort(key=lambda a: (not a.is_default,))
     return jsonify([a.to_dict() for a in addresses])
 
 
@@ -46,8 +46,8 @@ def create_address():
     if errors:
         return jsonify({'message': 'Please fix the errors below.', 'errors': errors}), 400
 
-    count = Address.query.filter_by(user_id=user_id).count()
-    address = Address(
+    count = get_db()['addresses'].count_documents({'user_id': user_id})
+    address = Address.create(
         user_id=user_id,
         full_name=data['full_name'].strip(),
         phone=data['phone'].strip(),
@@ -63,16 +63,16 @@ def create_address():
         instructions=(data.get('instructions') or '').strip() or None,
         is_default=count == 0,
     )
-    db.session.add(address)
-    db.session.commit()
     return jsonify(address.to_dict()), 201
 
 
-@addresses_bp.route('/<int:address_id>', methods=['PUT'])
+@addresses_bp.route('/<string:address_id>', methods=['PUT'])
 @jwt_required()
 def update_address(address_id):
     user_id = get_jwt_identity()
-    address = Address.query.filter_by(id=address_id, user_id=user_id).first_or_404()
+    address = Address.find_by_id(address_id)
+    if not address or address.user_id != user_id:
+        abort(404)
     data = request.get_json(silent=True) or {}
     errors = _validate_address(data, partial=True)
     if errors:
@@ -80,29 +80,30 @@ def update_address(address_id):
     for field in ['full_name', 'phone', 'email', 'line1', 'line2', 'area',
                   'city', 'state', 'pincode', 'gst', 'company', 'instructions']:
         if field in data:
-            setattr(address, field, (data[field] or '').strip() or None
-                    if field not in ('full_name', 'phone', 'line1', 'area', 'city', 'state', 'pincode')
-                    else data[field].strip())
-    db.session.commit()
+            address._doc[field] = (data[field] or '').strip() or None
+    address.save()
     return jsonify(address.to_dict())
 
 
-@addresses_bp.route('/<int:address_id>', methods=['DELETE'])
+@addresses_bp.route('/<string:address_id>', methods=['DELETE'])
 @jwt_required()
 def delete_address(address_id):
     user_id = get_jwt_identity()
-    address = Address.query.filter_by(id=address_id, user_id=user_id).first_or_404()
-    db.session.delete(address)
-    db.session.commit()
+    address = Address.find_by_id(address_id)
+    if not address or address.user_id != user_id:
+        abort(404)
+    address.delete()
     return jsonify({'message': 'Address deleted'})
 
 
-@addresses_bp.route('/<int:address_id>/default', methods=['PUT'])
+@addresses_bp.route('/<string:address_id>/default', methods=['PUT'])
 @jwt_required()
 def set_default(address_id):
     user_id = get_jwt_identity()
-    Address.query.filter_by(user_id=user_id).update({'is_default': False})
-    address = Address.query.filter_by(id=address_id, user_id=user_id).first_or_404()
-    address.is_default = True
-    db.session.commit()
+    get_db()['addresses'].update_many({'user_id': user_id}, {'$set': {'is_default': False}})
+    address = Address.find_by_id(address_id)
+    if not address or address.user_id != user_id:
+        abort(404)
+    address._doc['is_default'] = True
+    address.save()
     return jsonify(address.to_dict())

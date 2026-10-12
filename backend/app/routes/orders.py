@@ -1,10 +1,11 @@
 import re
 import random
 import string
-from flask import Blueprint, request, jsonify
+from datetime import datetime
+from flask import Blueprint, request, jsonify, abort
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..extensions import db
-from ..models import Order, OrderItem, OrderStatusHistory, CartItem, Notification
+from ..models import Order, CartItem, Notification
+from ..extensions import get_db
 from ..utils.auth import admin_required
 from ..utils.whatsapp import (send_new_order_alert, send_order_confirmation,
                               send_status_update_alert)
@@ -29,7 +30,7 @@ def create_order():
     user_id = get_jwt_identity()
     data = request.get_json(silent=True) or {}
 
-    cart_items = CartItem.query.filter_by(user_id=user_id).all()
+    cart_items = CartItem.find_by_user(user_id)
     if not cart_items:
         return jsonify({'message': 'Your cart is empty.'}), 400
 
@@ -43,19 +44,51 @@ def create_order():
 
     payment_method = data.get('payment_method', 'upi')
     if payment_method not in VALID_PAYMENT_METHODS:
-        return jsonify({'message': f'Invalid payment method. Choose from: {', '.join(VALID_PAYMENT_METHODS)}.'}), 400
+        return jsonify({'message': f'Invalid payment method.'}), 400
 
-    subtotal = sum(float(i.base_price + i.front_print_cost + i.back_print_cost) *
-                   sum(v for v in i.sizes.values() if v > 0) for i in cart_items)
+    subtotal = sum(
+        (float(ci.base_price) + float(ci.front_print_cost) + float(ci.back_print_cost)) *
+        sum(v for v in (ci.sizes or {}).values() if v > 0)
+        for ci in cart_items
+    )
     delivery = 0 if subtotal >= 999 else 79
     discount = 0
     total = subtotal + delivery - discount
 
+    # Build embedded order items from cart
+    item_lines = []
+    total_qty = 0
+    embedded_items = []
+    for ci in cart_items:
+        qty = sum(v for v in (ci.sizes or {}).values() if v > 0)
+        total_qty += qty
+        product = ci.get_product()
+        product_name = product.name if product else 'Custom Tee'
+        sizes_str = ', '.join(f'{k}×{v}' for k, v in (ci.sizes or {}).items() if v > 0)
+        colour = f' ({ci.colour})' if ci.colour else ''
+        item_lines.append(
+            f'{product_name}{colour} — {sizes_str}' if sizes_str else f'{product_name}{colour}'
+        )
+        embedded_items.append({
+            'product_id': ci.product_id,
+            'product_snapshot': product.to_dict() if product else None,
+            'colour': ci.colour,
+            'colour_hex': ci.colour_hex,
+            'sizes': ci.sizes,
+            'front_design': ci.front_design,
+            'back_design': ci.back_design,
+            'front_dimensions': ci.front_dimensions,
+            'back_dimensions': ci.back_dimensions,
+            'base_price': float(ci.base_price),
+            'front_print_cost': float(ci.front_print_cost),
+            'back_print_cost': float(ci.back_print_cost),
+            'total': float(ci.total),
+        })
+
     order_number = generate_order_number()
-    order = Order(
+    order = Order.create(
         order_number=order_number,
         user_id=user_id,
-        status='placed',
         subtotal=subtotal,
         delivery=delivery,
         discount=discount,
@@ -64,72 +97,35 @@ def create_order():
         payment_method=payment_method,
         address_snapshot=address,
         special_instructions=(data.get('special_instructions') or '')[:500] or None,
+        items=embedded_items,
     )
-    db.session.add(order)
-    db.session.flush()
 
-    # Collected for the store-owner WhatsApp alert (built before the cart rows
-    # are deleted below, so the item data is still attached).
-    item_lines = []
-    total_qty = 0
-    for ci in cart_items:
-        total_qty += sum(v for v in (ci.sizes or {}).values() if v > 0)
-        product_name = ci.product.name if ci.product else 'Custom Tee'
-        sizes_str = ', '.join(f'{k}×{v}' for k, v in (ci.sizes or {}).items() if v > 0)
-        colour = f' ({ci.colour})' if ci.colour else ''
-        item_lines.append(f'{product_name}{colour} — {sizes_str}' if sizes_str
-                          else f'{product_name}{colour}')
-        item = OrderItem(
-            order_id=order.id,
-            product_id=ci.product_id,
-            product_snapshot=ci.product.to_dict() if ci.product else None,
-            colour=ci.colour,
-            colour_hex=ci.colour_hex,
-            sizes=ci.sizes,
-            front_design=ci.front_design,
-            back_design=ci.back_design,
-            front_dimensions=ci.front_dimensions,
-            back_dimensions=ci.back_dimensions,
-            base_price=ci.base_price,
-            front_print_cost=ci.front_print_cost,
-            back_print_cost=ci.back_print_cost,
-            total=ci.total,
-        )
-        db.session.add(item)
+    # Clear cart
+    get_db()['cart_items'].delete_many({'user_id': user_id})
 
-    history = OrderStatusHistory(order_id=order.id, status='placed', created_by=user_id)
-    db.session.add(history)
-
-    CartItem.query.filter_by(user_id=user_id).delete()
-
-    notif = Notification(
+    # Notification
+    Notification.create(
         user_id=user_id,
         title='Order Placed Successfully!',
         message=f'Your order #{order.order_number} has been placed. We will review your design shortly.',
         type='order',
     )
-    db.session.add(notif)
-    db.session.commit()
 
-    # Notify the store owner on WhatsApp (best-effort; never fails the order).
-    addr = data.get('address') if isinstance(data.get('address'), dict) else {}
+    # WhatsApp alerts (best-effort)
+    addr = address if isinstance(address, dict) else {}
     customer_name = addr.get('full_name') or addr.get('name')
     send_new_order_alert(
-        order_number,
-        total,
+        order_number, total,
         customer_name=customer_name,
         customer_phone=addr.get('phone'),
         item_count=total_qty,
         item_lines=item_lines,
         address=addr,
-        payment_method=order.payment_method,
+        payment_method=payment_method,
         notes=data.get('special_instructions'),
     )
-    # Send the customer a WhatsApp order confirmation (best-effort).
     send_order_confirmation(
-        addr.get('phone'),
-        order_number,
-        total,
+        addr.get('phone'), order_number, total,
         customer_name=customer_name,
         item_count=total_qty,
         item_lines=item_lines,
@@ -142,58 +138,66 @@ def create_order():
 @jwt_required()
 def get_orders():
     user_id = get_jwt_identity()
-    orders = Order.query.filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+    orders = Order.find_by_user(user_id)
     return jsonify([o.to_dict() for o in orders])
 
 
-@orders_bp.route('/<int:order_id>', methods=['GET'])
+@orders_bp.route('/<string:order_id>', methods=['GET'])
 @jwt_required()
 def get_order(order_id):
     user_id = get_jwt_identity()
-    order = Order.query.filter_by(id=order_id, user_id=user_id).first_or_404()
+    order = Order.find_by_id(order_id)
+    if not order or order.user_id != user_id:
+        abort(404)
     return jsonify(order.to_dict())
 
 
-@orders_bp.route('/<int:order_id>/cancel', methods=['POST'])
+@orders_bp.route('/<string:order_id>/cancel', methods=['POST'])
 @jwt_required()
 def cancel_order(order_id):
     user_id = get_jwt_identity()
-    order = Order.query.filter_by(id=order_id, user_id=user_id).first_or_404()
+    order = Order.find_by_id(order_id)
+    if not order or order.user_id != user_id:
+        abort(404)
     if order.status not in ('placed', 'confirmed', 'design_review'):
         return jsonify({'message': 'Order cannot be cancelled at this stage'}), 400
-    data = request.get_json()
-    order.status = 'cancelled'
-    db.session.add(OrderStatusHistory(order_id=order.id, status='cancelled',
-                                       note=data.get('reason'), created_by=user_id))
-    db.session.commit()
+    data = request.get_json() or {}
+    now = datetime.utcnow().isoformat()
+    order._doc['status'] = 'cancelled'
+    order._doc['status_history'].append({'status': 'cancelled', 'note': data.get('reason', ''), 'timestamp': now})
+    order.save()
     return jsonify(order.to_dict())
 
 
-@orders_bp.route('/<int:order_id>/return', methods=['POST'])
+@orders_bp.route('/<string:order_id>/return', methods=['POST'])
 @jwt_required()
 def request_return(order_id):
     user_id = get_jwt_identity()
-    order = Order.query.filter_by(id=order_id, user_id=user_id).first_or_404()
+    order = Order.find_by_id(order_id)
+    if not order or order.user_id != user_id:
+        abort(404)
     if order.status != 'delivered':
         return jsonify({'message': 'Only delivered orders can be returned'}), 400
-    data = request.get_json()
-    order.status = 'return_requested'
-    db.session.add(OrderStatusHistory(order_id=order.id, status='return_requested',
-                                       note=data.get('reason'), created_by=user_id))
-    db.session.commit()
+    data = request.get_json() or {}
+    now = datetime.utcnow().isoformat()
+    order._doc['status'] = 'return_requested'
+    order._doc['status_history'].append({'status': 'return_requested', 'note': data.get('reason', ''), 'timestamp': now})
+    order.save()
     return jsonify(order.to_dict())
 
 
-@orders_bp.route('/<int:order_id>/refund', methods=['POST'])
+@orders_bp.route('/<string:order_id>/refund', methods=['POST'])
 @jwt_required()
 def request_refund(order_id):
     user_id = get_jwt_identity()
-    order = Order.query.filter_by(id=order_id, user_id=user_id).first_or_404()
-    data = request.get_json()
-    order.status = 'refund_requested'
-    db.session.add(OrderStatusHistory(order_id=order.id, status='refund_requested',
-                                       note=data.get('reason'), created_by=user_id))
-    db.session.commit()
+    order = Order.find_by_id(order_id)
+    if not order or order.user_id != user_id:
+        abort(404)
+    data = request.get_json() or {}
+    now = datetime.utcnow().isoformat()
+    order._doc['status'] = 'refund_requested'
+    order._doc['status_history'].append({'status': 'refund_requested', 'note': data.get('reason', ''), 'timestamp': now})
+    order.save()
     return jsonify(order.to_dict())
 
 
@@ -202,64 +206,74 @@ def request_refund(order_id):
 @admin_required
 def admin_get_orders():
     page = request.args.get('page', 1, type=int)
+    per_page = 20
     status = request.args.get('status')
-    q = Order.query
+    query = {}
     if status:
-        q = q.filter_by(status=status)
-    pagination = q.order_by(Order.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+        query['status'] = status
+    col = get_db()['orders']
+    total = col.count_documents(query)
+    docs = list(col.find(query).sort('created_at', -1).skip((page - 1) * per_page).limit(per_page))
+    orders = [Order(d) for d in docs]
     return jsonify({
-        'items': [o.to_dict() for o in pagination.items],
-        'total': pagination.total, 'page': page, 'pages': pagination.pages,
+        'items': [o.to_dict() for o in orders],
+        'total': total, 'page': page, 'pages': max(1, (total + per_page - 1) // per_page),
     })
 
 
-@orders_bp.route('/admin/<int:order_id>', methods=['GET'])
+@orders_bp.route('/admin/<string:order_id>', methods=['GET'])
 @admin_required
 def admin_get_order(order_id):
-    order = Order.query.get_or_404(order_id)
+    order = Order.find_by_id(order_id)
+    if not order:
+        abort(404)
     return jsonify(order.to_dict())
 
 
-@orders_bp.route('/admin/<int:order_id>', methods=['DELETE'])
+@orders_bp.route('/admin/<string:order_id>', methods=['DELETE'])
 @admin_required
 def admin_delete_order(order_id):
-    order = Order.query.get_or_404(order_id)
+    order = Order.find_by_id(order_id)
+    if not order:
+        abort(404)
     if order.status not in ('cancelled', 'returned'):
         return jsonify({'message': 'Only cancelled or returned orders can be deleted.'}), 400
-    db.session.delete(order)
-    db.session.commit()
+    get_db()['orders'].delete_one({'_id': order._doc['_id']})
     return jsonify({'message': 'Order deleted.'})
 
 
-@orders_bp.route('/admin/<int:order_id>/status', methods=['PUT'])
+@orders_bp.route('/admin/<string:order_id>/status', methods=['PUT'])
 @admin_required
 def update_order_status(order_id):
     from ..utils.auth import get_current_user
     admin = get_current_user()
-    order = Order.query.get_or_404(order_id)
+    order = Order.find_by_id(order_id)
+    if not order:
+        abort(404)
     data = request.get_json(silent=True) or {}
     new_status = (data.get('status') or '').strip()
     if not new_status:
         return jsonify({'message': 'Status is required.'}), 400
     if new_status not in VALID_STATUSES:
-        return jsonify({'message': f'Invalid status. Valid values: {', '.join(VALID_STATUSES)}.'}), 400
+        return jsonify({'message': f'Invalid status.'}), 400
 
-    order.status = new_status
+    now = datetime.utcnow().isoformat()
+    order._doc['status'] = new_status
     if data.get('tracking_id'):
-        order.tracking_id = data['tracking_id']
+        order._doc['tracking_id'] = data['tracking_id']
     if data.get('courier'):
-        order.courier = data['courier']
+        order._doc['courier'] = data['courier']
     if data.get('estimated_delivery'):
-        order.estimated_delivery = data['estimated_delivery']
+        order._doc['estimated_delivery'] = data['estimated_delivery']
+    order._doc['status_history'].append({
+        'status': new_status, 'note': data.get('note', ''), 'timestamp': now,
+    })
+    order.save()
 
-    db.session.add(OrderStatusHistory(order_id=order.id, status=new_status,
-                                       note=data.get('note'), created_by=admin.id))
-    db.session.commit()
-
-    # Notify the store owner on WhatsApp (best-effort; never fails the update).
     send_status_update_alert(
         order.order_number, new_status,
         note=data.get('note'),
-        tracking_id=order.tracking_id, courier=order.courier,
+        tracking_id=order.tracking_id,
+        courier=order.courier,
     )
     return jsonify(order.to_dict())

@@ -1,8 +1,9 @@
-from flask import Blueprint, jsonify, request
-from sqlalchemy import func
-from ..extensions import db
-from ..models import Order, User, Product, Inventory, Design, Enquiry, Review, Setting
+from flask import Blueprint, jsonify, request, abort
+from ..extensions import get_db
+from ..models import Order, User, Product, Inventory, Design, Enquiry, Review, Coupon
 from ..utils.auth import admin_required
+from datetime import datetime, timedelta
+from bson import ObjectId
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -10,22 +11,23 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/dashboard', methods=['GET'])
 @admin_required
 def dashboard():
-    total_orders = Order.query.count()
-    total_sales = db.session.query(func.sum(Order.total)).filter(
-        Order.payment_status == 'paid').scalar() or 0
+    col = get_db()
+    total_orders = col['orders'].count_documents({})
+    paid_orders = list(col['orders'].find({'payment_status': 'paid'}, {'total': 1}))
+    total_sales = sum(float(o.get('total', 0)) for o in paid_orders)
 
     status_counts = {}
     for status in ['placed', 'confirmed', 'design_review', 'design_approved',
                    'printing', 'quality_check', 'packed', 'shipped',
                    'out_for_delivery', 'delivered', 'cancelled', 'returned']:
-        status_counts[status] = Order.query.filter_by(status=status).count()
+        status_counts[status] = col['orders'].count_documents({'status': status})
 
-    customers = User.query.filter_by(role='customer').count()
-    low_stock = Inventory.query.filter(Inventory.stock > 0, Inventory.stock <= 5).count()
-    out_of_stock = Inventory.query.filter_by(stock=0).count()
+    customers = col['users'].count_documents({'role': 'customer'})
+    low_stock = col['inventory'].count_documents({'stock': {'$gt': 0, '$lte': 5}})
+    out_of_stock = col['inventory'].count_documents({'stock': 0})
 
     return jsonify({
-        'total_sales': float(total_sales),
+        'total_sales': total_sales,
         'total_orders': total_orders,
         'new_orders': status_counts.get('placed', 0),
         'printing': status_counts.get('printing', 0),
@@ -44,17 +46,19 @@ def dashboard():
 @admin_bp.route('/customers', methods=['GET'])
 @admin_required
 def get_customers():
-    users = User.query.filter_by(role='customer').order_by(User.created_at.desc()).all()
+    col = get_db()
+    users = list(col['users'].find({'role': 'customer'}).sort('created_at', -1))
     result = []
-    for u in users:
-        orders = Order.query.filter_by(user_id=u.id).all()
-        total_spent = sum(float(o.total) for o in orders if o.payment_status == 'paid')
-        last_order = max((o.created_at for o in orders), default=None)
+    for u_doc in users:
+        u = User(u_doc)
+        orders = list(col['orders'].find({'user_id': u.id}))
+        total_spent = sum(float(o.get('total', 0)) for o in orders if o.get('payment_status') == 'paid')
+        last_order_dt = max((o['created_at'] for o in orders if o.get('created_at')), default=None)
         result.append({
             **u.to_dict(),
             'orders': len(orders),
             'total_spent': total_spent,
-            'last_order': last_order.isoformat() if last_order else None,
+            'last_order': last_order_dt.isoformat() if isinstance(last_order_dt, datetime) else last_order_dt,
         })
     return jsonify(result)
 
@@ -62,15 +66,21 @@ def get_customers():
 @admin_bp.route('/inventory', methods=['GET'])
 @admin_required
 def get_inventory():
-    items = Inventory.query.all()
+    col = get_db()
+    items = list(col['inventory'].find())
     result = []
     for i in items:
-        d = i.to_dict()
-        d['product_name'] = i.product.name if i.product else None
-        d['product_type'] = i.product.type if i.product else None
-        if i.variant:
-            d['variant_name'] = i.variant.name
-            d['audience'] = i.variant.audience
+        inv = Inventory(i)
+        d = inv.to_dict()
+        if inv.product_id:
+            product = Product.find_by_id(inv.product_id)
+            d['product_name'] = product.name if product else None
+            d['product_type'] = product.type if product else None
+        if inv.variant_id:
+            variant_doc = col['product_variants'].find_one({'_id': ObjectId(inv.variant_id)}) if inv.variant_id else None
+            if variant_doc:
+                d['variant_name'] = variant_doc.get('name')
+                d['audience'] = variant_doc.get('audience')
         result.append(d)
     return jsonify(result)
 
@@ -79,183 +89,164 @@ def get_inventory():
 @admin_required
 def create_inventory_row():
     data = request.get_json()
-    item = Inventory(
+    item = Inventory.create(
         product_id=data['product_id'],
         variant_id=data.get('variant_id'),
         colour=data['colour'],
         size=data['size'],
         stock=data.get('stock', 0),
     )
-    db.session.add(item)
-    db.session.commit()
     return jsonify(item.to_dict()), 201
 
 
-@admin_bp.route('/inventory/<int:item_id>', methods=['PUT'])
+@admin_bp.route('/inventory/<string:item_id>', methods=['PUT'])
 @admin_required
 def update_inventory(item_id):
-    item = Inventory.query.get_or_404(item_id)
+    try:
+        doc = get_db()['inventory'].find_one({'_id': ObjectId(item_id)})
+    except Exception:
+        abort(404)
+    if not doc:
+        abort(404)
     data = request.get_json()
     if 'stock' in data:
-        item.stock = data['stock']
-    db.session.commit()
-    return jsonify(item.to_dict())
+        get_db()['inventory'].update_one({'_id': doc['_id']}, {'$set': {'stock': data['stock']}})
+        doc['stock'] = data['stock']
+    return jsonify(Inventory(doc).to_dict())
 
 
 @admin_bp.route('/designs', methods=['GET'])
 @admin_required
 def get_designs():
-    designs = Design.query.order_by(Design.created_at.desc()).all()
-    return jsonify([d.to_dict() for d in designs])
-
-
-@admin_bp.route('/designs/<int:design_id>', methods=['PUT'])
-@admin_required
-def update_design(design_id):
-    design = Design.query.get_or_404(design_id)
-    data = request.get_json()
-    for field in ['name', 'category', 'image_url', 'is_trending', 'is_featured', 'is_active']:
-        if field in data:
-            setattr(design, field, data[field])
-    db.session.commit()
-    return jsonify(design.to_dict())
-
-
-@admin_bp.route('/designs/<int:design_id>', methods=['DELETE'])
-@admin_required
-def delete_design(design_id):
-    design = Design.query.get_or_404(design_id)
-    design.is_active = False
-    db.session.commit()
-    return jsonify({'message': 'Design deactivated'})
+    docs = list(get_db()['designs'].find().sort('created_at', -1))
+    return jsonify([Design(d).to_dict() for d in docs])
 
 
 @admin_bp.route('/designs', methods=['POST'])
 @admin_required
 def create_design():
     data = request.get_json()
-    design = Design(
+    design = Design.create(
         name=data['name'],
         category=data.get('category', 'Trending'),
         image_url=data.get('image_url', ''),
         is_trending=data.get('is_trending', False),
         is_featured=data.get('is_featured', False),
-        is_active=data.get('is_active', True),
     )
-    db.session.add(design)
-    db.session.commit()
     return jsonify(design.to_dict()), 201
+
+
+@admin_bp.route('/designs/<string:design_id>', methods=['PUT'])
+@admin_required
+def update_design(design_id):
+    design = Design.find_by_id(design_id)
+    if not design:
+        abort(404)
+    data = request.get_json()
+    for field in ['name', 'category', 'image_url', 'is_trending', 'is_featured', 'is_active']:
+        if field in data:
+            design._doc[field] = data[field]
+    design.save()
+    return jsonify(design.to_dict())
+
+
+@admin_bp.route('/designs/<string:design_id>', methods=['DELETE'])
+@admin_required
+def delete_design(design_id):
+    design = Design.find_by_id(design_id)
+    if not design:
+        abort(404)
+    design._doc['is_active'] = False
+    design.save()
+    return jsonify({'message': 'Design deactivated'})
 
 
 @admin_bp.route('/coupons', methods=['GET'])
 @admin_required
 def get_coupons():
-    from ..models import Coupon
-    coupons = Coupon.query.order_by(Coupon.created_at.desc()).all()
+    docs = list(get_db()['coupons'].find().sort('created_at', -1))
     result = []
-    for c in coupons:
-        d = c.to_dict()
-        d['id'] = c.id
-        d['is_active'] = c.is_active
-        d['used_count'] = c.used_count
-        d['max_uses'] = c.max_uses
-        result.append(d)
+    for d in docs:
+        c = Coupon(d)
+        result.append({**c.to_dict(), 'id': c.id, 'is_active': c.is_active,
+                       'used_count': c.used_count, 'max_uses': c.max_uses})
     return jsonify(result)
-
-
-@admin_bp.route('/coupons/<int:coupon_id>', methods=['PUT'])
-@admin_required
-def update_coupon(coupon_id):
-    from ..models import Coupon
-    from datetime import datetime
-    coupon = Coupon.query.get_or_404(coupon_id)
-    data = request.get_json()
-    for field in ['type', 'value', 'min_order', 'max_uses', 'is_active']:
-        if field in data:
-            setattr(coupon, field, data[field])
-    if data.get('expiry'):
-        coupon.expiry = datetime.fromisoformat(data['expiry'])
-    db.session.commit()
-    d = coupon.to_dict()
-    d['id'] = coupon.id
-    d['is_active'] = coupon.is_active
-    d['used_count'] = coupon.used_count
-    d['max_uses'] = coupon.max_uses
-    return jsonify(d)
-
-
-@admin_bp.route('/coupons/<int:coupon_id>', methods=['DELETE'])
-@admin_required
-def delete_coupon(coupon_id):
-    from ..models import Coupon
-    coupon = Coupon.query.get_or_404(coupon_id)
-    db.session.delete(coupon)
-    db.session.commit()
-    return jsonify({'message': 'Deleted'})
 
 
 @admin_bp.route('/reviews', methods=['GET'])
 @admin_required
 def get_reviews():
-    reviews = Review.query.order_by(Review.created_at.desc()).all()
+    docs = list(get_db()['reviews'].find().sort('created_at', -1))
     result = []
-    for r in reviews:
-        d = r.to_dict()
-        d['is_approved'] = r.is_approved
-        d['product_id'] = r.product_id
-        if r.product:
-            d['product_name'] = r.product.name
-        result.append(d)
+    for d in docs:
+        r = Review(d)
+        rd = r.to_dict()
+        rd['is_approved'] = r.is_approved
+        rd['product_id'] = r.product_id
+        product = Product.find_by_id(r.product_id) if r.product_id else None
+        if product:
+            rd['product_name'] = product.name
+        result.append(rd)
     return jsonify(result)
 
 
-@admin_bp.route('/reviews/<int:review_id>', methods=['PUT'])
+@admin_bp.route('/reviews/<string:review_id>', methods=['PUT'])
 @admin_required
 def moderate_review(review_id):
-    review = Review.query.get_or_404(review_id)
+    try:
+        doc = get_db()['reviews'].find_one({'_id': ObjectId(review_id)})
+    except Exception:
+        abort(404)
+    if not doc:
+        abort(404)
     data = request.get_json()
     if 'is_approved' in data:
-        review.is_approved = data['is_approved']
-    db.session.commit()
-    return jsonify(review.to_dict())
+        get_db()['reviews'].update_one({'_id': doc['_id']}, {'$set': {'is_approved': bool(data['is_approved'])}})
+        doc['is_approved'] = bool(data['is_approved'])
+    return jsonify(Review(doc).to_dict())
 
 
-@admin_bp.route('/reviews/<int:review_id>', methods=['DELETE'])
+@admin_bp.route('/reviews/<string:review_id>', methods=['DELETE'])
 @admin_required
 def delete_review(review_id):
-    review = Review.query.get_or_404(review_id)
-    db.session.delete(review)
-    db.session.commit()
+    try:
+        result = get_db()['reviews'].delete_one({'_id': ObjectId(review_id)})
+    except Exception:
+        abort(404)
+    if result.deleted_count == 0:
+        abort(404)
     return jsonify({'message': 'Deleted'})
 
 
 @admin_bp.route('/enquiries', methods=['GET'])
 @admin_required
 def get_enquiries():
-    enquiries = Enquiry.query.order_by(Enquiry.created_at.desc()).all()
-    return jsonify([e.to_dict() for e in enquiries])
+    docs = list(get_db()['enquiries'].find().sort('created_at', -1))
+    return jsonify([Enquiry(d).to_dict() for d in docs])
 
 
 @admin_bp.route('/settings', methods=['GET'])
 @admin_required
 def get_settings():
-    settings = Setting.query.all()
+    import json
+    docs = list(get_db()['settings'].find())
     result = {}
-    for s in settings:
-        if s.type == 'json':
-            import json
+    for s in docs:
+        val = s.get('value')
+        t = s.get('type', 'string')
+        if t == 'json':
             try:
-                result[s.key] = json.loads(s.value)
+                result[s['key']] = json.loads(val)
             except Exception:
-                result[s.key] = s.value
-        elif s.type == 'int':
-            result[s.key] = int(s.value) if s.value else 0
-        elif s.type == 'float':
-            result[s.key] = float(s.value) if s.value else 0.0
-        elif s.type == 'bool':
-            result[s.key] = s.value == 'true'
+                result[s['key']] = val
+        elif t == 'int':
+            result[s['key']] = int(val) if val else 0
+        elif t == 'float':
+            result[s['key']] = float(val) if val else 0.0
+        elif t == 'bool':
+            result[s['key']] = val == 'true'
         else:
-            result[s.key] = s.value
+            result[s['key']] = val
     return jsonify(result)
 
 
@@ -264,212 +255,60 @@ def get_settings():
 def update_settings():
     import json
     data = request.get_json()
+    col = get_db()['settings']
     for key, value in data.items():
-        setting = Setting.query.filter_by(key=key).first()
-        if setting:
-            if isinstance(value, (dict, list)):
-                setting.value = json.dumps(value)
-                setting.type = 'json'
-            elif isinstance(value, bool):
-                setting.value = 'true' if value else 'false'
-                setting.type = 'bool'
-            elif isinstance(value, int):
-                setting.value = str(value)
-                setting.type = 'int'
-            elif isinstance(value, float):
-                setting.value = str(value)
-                setting.type = 'float'
-            else:
-                setting.value = str(value)
-                setting.type = 'string'
+        if isinstance(value, (dict, list)):
+            s_type, s_value = 'json', json.dumps(value)
+        elif isinstance(value, bool):
+            s_type, s_value = 'bool', 'true' if value else 'false'
+        elif isinstance(value, int):
+            s_type, s_value = 'int', str(value)
+        elif isinstance(value, float):
+            s_type, s_value = 'float', str(value)
         else:
-            if isinstance(value, (dict, list)):
-                s_type = 'json'
-                s_value = json.dumps(value)
-            elif isinstance(value, bool):
-                s_type = 'bool'
-                s_value = 'true' if value else 'false'
-            elif isinstance(value, int):
-                s_type = 'int'
-                s_value = str(value)
-            elif isinstance(value, float):
-                s_type = 'float'
-                s_value = str(value)
-            else:
-                s_type = 'string'
-                s_value = str(value)
-            db.session.add(Setting(key=key, value=s_value, type=s_type))
-    db.session.commit()
+            s_type, s_value = 'string', str(value)
+        col.update_one({'key': key}, {'$set': {'value': s_value, 'type': s_type}}, upsert=True)
     return jsonify({'message': 'Settings saved'})
 
 
 @admin_bp.route('/reset', methods=['POST'])
 def reset_database():
-    """Wipe all user-generated data. Catalog (products/variants/inventory) is preserved."""
     data = request.get_json(silent=True) or {}
     if data.get('key') != 'printheaven-setup-2024':
         return jsonify({'message': 'Invalid setup key'}), 403
 
-    from ..models import (CartItem, WishlistItem, Review, Notification,
-                          AuthToken, Address, OrderItem, OrderStatusHistory,
-                          Order, Enquiry)
-    from sqlalchemy import text
+    col = get_db()
+    for collection in ['auth_tokens', 'cart_items', 'wishlist_items', 'reviews',
+                       'notifications', 'addresses', 'enquiries', 'orders', 'users']:
+        col[collection].delete_many({})
 
-    try:
-        # Use TRUNCATE with CASCADE on Postgres for a clean wipe
-        db.session.execute(text('TRUNCATE TABLE auth_tokens, cart_items, wishlist_items, reviews, notifications, addresses, enquiries, order_items, order_status_history, orders, users RESTART IDENTITY CASCADE'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        # Fallback: manual delete in FK order
-        AuthToken.query.delete(synchronize_session=False)
-        CartItem.query.delete(synchronize_session=False)
-        WishlistItem.query.delete(synchronize_session=False)
-        Review.query.delete(synchronize_session=False)
-        Notification.query.delete(synchronize_session=False)
-        Address.query.delete(synchronize_session=False)
-        Enquiry.query.delete(synchronize_session=False)
-        OrderItem.query.delete(synchronize_session=False)
-        OrderStatusHistory.query.delete(synchronize_session=False)
-        Order.query.delete(synchronize_session=False)
-        User.query.delete(synchronize_session=False)
-        db.session.commit()
-
-    # Recreate admin user
-    admin = User(
-        name='Admin',
-        email='admin@printheaven.co.in',
+    admin = User.create(
+        name='Admin', email='admin@printheaven.co.in',
         password_hash=User.hash_password('admin123'),
-        role='admin',
-        email_verified=True,
-        token_version=1,
+        role='admin', email_verified=True,
     )
-    db.session.add(admin)
-    db.session.commit()
     return jsonify({'message': 'All user data wiped. Catalog preserved. Admin user recreated.'})
-
-
-@admin_bp.route('/schema', methods=['GET'])
-def get_schema():
-    """Returns the database schema — tables, columns, relationships and constraints."""
-    return jsonify({
-        'database': 'PostgreSQL (Supabase)',
-        'tables': {
-            'users': {
-                'primary_key': 'id',
-                'columns': ['id', 'name', 'email', 'phone', 'password_hash', 'role',
-                            'is_active', 'avatar', 'email_verified', 'phone_verified',
-                            'last_login', 'token_version', 'created_at', 'updated_at'],
-                'constraints': ['email UNIQUE', 'email_verified NOT NULL', 'role DEFAULT customer'],
-                'relationships': ['has_many orders', 'has_many cart_items', 'has_many addresses',
-                                  'has_many reviews', 'has_many auth_tokens'],
-            },
-            'products': {
-                'primary_key': 'id',
-                'columns': ['id', 'name', 'slug', 'type', 'description', 'material', 'fit',
-                            'base_price', 'images', 'colours', 'sizes', 'rating', 'review_count',
-                            'is_featured', 'is_new', 'is_active', 'audiences', 'gsm', 'fabric'],
-                'constraints': ['slug UNIQUE', 'base_price NOT NULL'],
-                'relationships': ['has_many product_variants', 'has_many inventory', 'has_many reviews'],
-            },
-            'product_variants': {
-                'primary_key': 'id',
-                'columns': ['id', 'product_id', 'name', 'slug', 'audience', 'price',
-                            'fabric', 'material', 'gsm', 'colours', 'sizes', 'images', 'is_active'],
-                'constraints': ['UNIQUE(product_id, slug)', 'audience IN (kids, adults)'],
-                'relationships': ['belongs_to product', 'has_many inventory'],
-            },
-            'inventory': {
-                'primary_key': 'id',
-                'columns': ['id', 'product_id', 'variant_id', 'colour', 'size', 'stock'],
-                'constraints': ['UNIQUE(product_id, colour, size, variant_id)', 'stock >= 0'],
-                'relationships': ['belongs_to product', 'belongs_to product_variant'],
-            },
-            'orders': {
-                'primary_key': 'id',
-                'columns': ['id', 'order_number', 'user_id', 'status', 'subtotal', 'delivery',
-                            'discount', 'total', 'payment_status', 'payment_method',
-                            'address_snapshot', 'tracking_id', 'courier', 'created_at'],
-                'constraints': ['order_number UNIQUE', 'status DEFAULT placed'],
-                'relationships': ['belongs_to user', 'has_many order_items', 'has_many order_status_history'],
-            },
-            'order_items': {
-                'primary_key': 'id',
-                'columns': ['id', 'order_id', 'product_id', 'product_snapshot', 'colour',
-                            'sizes', 'front_design', 'back_design', 'base_price', 'total'],
-                'relationships': ['belongs_to order', 'belongs_to product'],
-            },
-            'auth_tokens': {
-                'primary_key': 'id',
-                'columns': ['id', 'user_id', 'purpose', 'token_hash', 'expires_at', 'used_at'],
-                'constraints': ['token_hash UNIQUE', 'purpose IN (verify_email, reset_password, verify_phone)'],
-                'relationships': ['belongs_to user'],
-            },
-            'addresses': {
-                'primary_key': 'id',
-                'columns': ['id', 'user_id', 'full_name', 'phone', 'line1', 'line2',
-                            'area', 'city', 'state', 'pincode', 'gst', 'is_default'],
-                'relationships': ['belongs_to user'],
-            },
-            'cart_items': {
-                'primary_key': 'id',
-                'columns': ['id', 'user_id', 'product_id', 'variant_id', 'colour', 'sizes',
-                            'front_design', 'back_design', 'base_price', 'total'],
-                'relationships': ['belongs_to user', 'belongs_to product'],
-            },
-            'reviews': {
-                'primary_key': 'id',
-                'columns': ['id', 'user_id', 'product_id', 'order_id', 'rating', 'text',
-                            'is_verified', 'is_approved', 'created_at'],
-                'constraints': ['rating BETWEEN 1 AND 5'],
-                'relationships': ['belongs_to user', 'belongs_to product'],
-            },
-            'coupons': {
-                'primary_key': 'id',
-                'columns': ['id', 'code', 'type', 'value', 'min_order', 'max_uses',
-                            'used_count', 'expiry', 'is_active'],
-                'constraints': ['code UNIQUE', 'type IN (percentage, flat)'],
-            },
-        },
-    })
 
 
 @admin_bp.route('/setup', methods=['POST'])
 def setup_database():
-    """One-time endpoint to create all tables and seed the admin user.
-    Protected by a setup key to prevent abuse.
-    """
-    from flask import current_app
     data = request.get_json(silent=True) or {}
-    setup_key = data.get('key') or ''
-    if setup_key != 'printheaven-setup-2024':
+    if data.get('key') != 'printheaven-setup-2024':
         return jsonify({'message': 'Invalid setup key'}), 403
 
-    db.create_all()
-
-    # Create admin user if not exists
-    if not User.query.filter_by(email='admin@printheaven.co.in').first():
-        admin = User(
-            name='Admin',
-            email='admin@printheaven.co.in',
+    if not User.find_by_email('admin@printheaven.co.in'):
+        User.create(
+            name='Admin', email='admin@printheaven.co.in',
             password_hash=User.hash_password('admin123'),
-            role='admin',
-            email_verified=True,
-            token_version=1,
+            role='admin', email_verified=True,
         )
-        db.session.add(admin)
-        db.session.commit()
         return jsonify({'message': 'Database setup complete. Admin user created.'})
-
     return jsonify({'message': 'Database already set up.'})
 
 
 @admin_bp.route('/seed', methods=['POST'])
 @admin_required
 def seed_products():
-    from ..models import Product, ProductVariant, Inventory, Design, Coupon
-    from datetime import datetime, timedelta
-
     C = {
         'Royal Blue': '#2563eb', 'Maroon': '#7f1d1d', 'Navy': '#1e3a5f',
         'Olive Green': '#556b2f', 'Black': '#1a1a1a', 'White': '#f5f5f5',
@@ -484,51 +323,26 @@ def seed_products():
     ADULT_SIZES = ['S', 'M', 'L', 'XL', '2XL']
 
     CATALOG = [
-        {
-            'name': 'Round Neck T-Shirt', 'slug': 'round-neck-t-shirt',
-            'type': 'Round Neck', 'audiences': ['kids', 'adults'],
-            'description': 'Everyday round neck tees in combed cotton and poly cotton.',
-            'images': ['/products/round-neck.png'],
-            'variants': [
-                {'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck', 'audience': 'adults', 'price': 170, 'fabric': '100% RL Combed Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
-                {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton', 'audience': 'adults', 'price': 95, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 180, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
-                {'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/round-neck.png']},
-            ],
-        },
-        {
-            'name': 'Polo T-Shirt', 'slug': 'polo-t-shirt',
-            'type': 'Polo', 'audiences': ['kids', 'adults'],
-            'description': 'Premium polos in pique, polyester and acid-wash finishes.',
-            'images': ['/products/polo.png'],
-            'variants': [
-                {'name': 'Premium Polo T-Shirt', 'slug': 'premium-polo', 'audience': 'adults', 'price': 270, 'fabric': '100% RL Combed Cotton', 'material': 'Pique', 'gsm': 240, 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
-                {'name': 'Polyester Mars Polo T-Shirt', 'slug': 'polyester-mars-polo', 'audience': 'adults', 'price': 180, 'fabric': '100% Polyester Mars', 'material': 'Polyester Mars', 'gsm': 200, 'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
-                {'name': 'Acid Wash Polo T-Shirt', 'slug': 'acid-wash-polo', 'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 220, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
-                {'name': 'Polo T-Shirt — Kids', 'slug': 'polo-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/polo.png']},
-            ],
-        },
-        {
-            'name': 'Oversized T-Shirt', 'slug': 'oversized-t-shirt',
-            'type': 'Oversized', 'audiences': ['kids', 'adults'],
-            'description': 'Drop-shoulder oversized fits in French Terry, poly cotton and acid wash.',
-            'images': ['/products/oversized.png'],
-            'variants': [
-                {'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry', 'audience': 'adults', 'price': 240, 'fabric': '100% RL Combed Cotton', 'material': 'French Terry', 'gsm': 240, 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink', 'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
-                {'name': 'Oversized T-Shirt — Poly Cotton', 'slug': 'oversized-poly-cotton', 'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 240, 'colours': colours('Maroon', 'White', 'Black', 'Navy', 'Half White'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
-                {'name': 'Acid Wash Oversized T-Shirt', 'slug': 'acid-wash-oversized', 'audience': 'adults', 'price': 280, 'fabric': '100% RL Combed Cotton', 'material': '100% RL Combed Cotton', 'gsm': 240, 'colours': colours('Olive Green', 'White', 'Maroon', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
-                {'name': 'Oversized T-Shirt — Kids', 'slug': 'oversized-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/oversized.png']},
-            ],
-        },
-        {
-            'name': 'Hoodies', 'slug': 'hoodies',
-            'type': 'Hoodies', 'audiences': ['adults'],
-            'description': 'Heavyweight loopknit-raised hoodies. Adults only.',
-            'images': ['/products/hoodie.png'],
-            'variants': [
-                {'name': 'Regular Hoodie', 'slug': 'regular-hoodie', 'audience': 'adults', 'price': 400, 'fabric': '100% Cotton', 'material': 'Loopknit Raised', 'gsm': 300, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
-                {'name': 'Acid Wash Hoodie', 'slug': 'acid-wash-hoodie', 'audience': 'adults', 'price': 440, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
-            ],
-        },
+        {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-t-shirt', 'type': 'Round Neck', 'audiences': ['kids', 'adults'], 'description': 'Everyday round neck tees in combed cotton and poly cotton.', 'images': ['/products/round-neck.png'],
+         'variants': [
+             {'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck', 'audience': 'adults', 'price': 170, 'fabric': '100% RL Combed Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+             {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton', 'audience': 'adults', 'price': 95, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 180, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+             {'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids', 'audience': 'kids', 'price': None, 'colours': [], 'sizes': [], 'images': ['/products/round-neck.png']},
+         ]},
+        {'name': 'Polo T-Shirt', 'slug': 'polo-t-shirt', 'type': 'Polo', 'audiences': ['kids', 'adults'], 'description': 'Premium polos.', 'images': ['/products/polo.png'],
+         'variants': [
+             {'name': 'Premium Polo T-Shirt', 'slug': 'premium-polo', 'audience': 'adults', 'price': 270, 'fabric': '100% RL Combed Cotton', 'material': 'Pique', 'gsm': 240, 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+             {'name': 'Polo T-Shirt — Kids', 'slug': 'polo-kids', 'audience': 'kids', 'price': None, 'colours': [], 'sizes': [], 'images': ['/products/polo.png']},
+         ]},
+        {'name': 'Oversized T-Shirt', 'slug': 'oversized-t-shirt', 'type': 'Oversized', 'audiences': ['kids', 'adults'], 'description': 'Drop-shoulder oversized fits.', 'images': ['/products/oversized.png'],
+         'variants': [
+             {'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry', 'audience': 'adults', 'price': 240, 'fabric': '100% RL Combed Cotton', 'material': 'French Terry', 'gsm': 240, 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink', 'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
+             {'name': 'Oversized T-Shirt — Kids', 'slug': 'oversized-kids', 'audience': 'kids', 'price': None, 'colours': [], 'sizes': [], 'images': ['/products/oversized.png']},
+         ]},
+        {'name': 'Hoodies', 'slug': 'hoodies', 'type': 'Hoodies', 'audiences': ['adults'], 'description': 'Heavyweight loopknit-raised hoodies.', 'images': ['/products/hoodie.png'],
+         'variants': [
+             {'name': 'Regular Hoodie', 'slug': 'regular-hoodie', 'audience': 'adults', 'price': 400, 'fabric': '100% Cotton', 'material': 'Loopknit Raised', 'gsm': 300, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
+         ]},
     ]
 
     def _union_colours(variants):
@@ -538,92 +352,83 @@ def seed_products():
                 seen.setdefault(c['name'], c['hex'])
         return [{'name': k, 'hex': v} for k, v in seen.items()]
 
-    created = 0
-    updated = 0
+    created = updated = 0
     for entry in CATALOG:
-        product = Product.query.filter_by(slug=entry['slug']).first()
         priced = [v for v in entry['variants'] if v.get('price') is not None]
-        if product is None:
-            product = Product(
+        existing = Product.find_by_slug(entry['slug'])
+        if existing is None:
+            product = Product.create(
                 name=entry['name'], slug=entry['slug'], type=entry['type'],
                 description=entry['description'], images=entry['images'],
                 audiences=entry['audiences'], fit='Regular Fit',
                 base_price=min(v['price'] for v in priced),
-                gsm=max([v['gsm'] for v in entry['variants'] if v.get('gsm')], default=None),
-                fabric=next((v['fabric'] for v in entry['variants'] if v.get('fabric')), None),
                 colours=_union_colours(entry['variants']),
                 sizes=ADULT_SIZES, is_active=True, is_new=True, is_featured=True,
             )
-            db.session.add(product)
-            db.session.flush()
             created += 1
         else:
-            product.images = entry['images']
-            product.audiences = entry['audiences']
-            product.base_price = min(v['price'] for v in priced)
-            product.colours = _union_colours(entry['variants'])
-            product.is_active = True
+            product = existing
+            product._doc.update({'images': entry['images'], 'audiences': entry['audiences'],
+                                  'base_price': min(v['price'] for v in priced),
+                                  'colours': _union_colours(entry['variants']), 'is_active': True})
+            product.save()
             updated += 1
 
+        col = get_db()
         for v in entry['variants']:
-            variant = ProductVariant.query.filter_by(product_id=product.id, slug=v['slug']).first()
-            if variant is None:
-                variant = ProductVariant(product_id=product.id, name=v['name'], slug=v['slug'], audience=v['audience'])
-                db.session.add(variant)
-                db.session.flush()
-            for field in ['name', 'price', 'fabric', 'material', 'gsm', 'colours', 'sizes', 'images']:
-                if field in v:
-                    setattr(variant, field, v[field])
-            variant.is_active = True
+            variant_doc = col['product_variants'].find_one({'product_id': product.id, 'slug': v['slug']})
+            if variant_doc is None:
+                variant = Inventory  # placeholder
+                from ..models import ProductVariant as PV
+                variant = PV.create(product_id=product.id, name=v['name'], slug=v['slug'], audience=v['audience'])
+            else:
+                from ..models import ProductVariant as PV
+                variant = PV(variant_doc)
+            updates = {k: v[k] for k in ['name', 'price', 'fabric', 'material', 'gsm', 'colours', 'sizes', 'images'] if k in v}
+            updates['is_active'] = True
+            variant._doc.update(updates)
+            variant.save()
+
             for colour in (variant.colours or []):
                 for size in (variant.sizes or []):
-                    if not Inventory.query.filter_by(product_id=product.id, variant_id=variant.id, colour=colour['name'], size=size).first():
-                        db.session.add(Inventory(product_id=product.id, variant_id=variant.id, colour=colour['name'], size=size, stock=25))
+                    if not col['inventory'].find_one({'product_id': product.id, 'variant_id': variant.id, 'colour': colour['name'], 'size': size}):
+                        Inventory.create(product_id=product.id, variant_id=variant.id, colour=colour['name'], size=size, stock=25)
 
     # Seed coupons
-    COUPONS = [
+    for c_data in [
         {'code': 'WELCOME10', 'type': 'percentage', 'value': 10, 'min_order': 499, 'expiry': datetime.utcnow() + timedelta(days=365)},
         {'code': 'FLAT100', 'type': 'flat', 'value': 100, 'min_order': 999, 'expiry': datetime.utcnow() + timedelta(days=180)},
-    ]
-    for c_data in COUPONS:
-        if not Coupon.query.filter_by(code=c_data['code']).first():
-            db.session.add(Coupon(**c_data))
+    ]:
+        if not get_db()['coupons'].find_one({'code': c_data['code']}):
+            now = datetime.utcnow()
+            get_db()['coupons'].insert_one({**c_data, 'used_count': 0, 'is_active': True, 'created_at': now, 'updated_at': now})
 
-    db.session.commit()
-    return jsonify({'message': f'Seeded successfully', 'created': created, 'updated': updated})
+    return jsonify({'message': 'Seeded successfully', 'created': created, 'updated': updated})
 
 
 @admin_bp.route('/analytics', methods=['GET'])
 @admin_required
 def get_analytics():
-    from datetime import datetime, timedelta
-    # Last 6 months sales
+    col = get_db()
     monthly_sales = []
     for i in range(5, -1, -1):
         month_start = datetime.utcnow().replace(day=1) - timedelta(days=30 * i)
-        month_end = month_start.replace(day=28) + timedelta(days=4)
-        month_end = month_end.replace(day=1)
-        sales = db.session.query(func.sum(Order.total)).filter(
-            Order.created_at >= month_start,
-            Order.created_at < month_end,
-            Order.payment_status == 'paid'
-        ).scalar() or 0
-        monthly_sales.append({
-            'month': month_start.strftime('%b'),
-            'sales': float(sales)
-        })
+        month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        paid = list(col['orders'].find({'created_at': {'$gte': month_start, '$lt': month_end}, 'payment_status': 'paid'}, {'total': 1}))
+        sales = sum(float(o.get('total', 0)) for o in paid)
+        monthly_sales.append({'month': month_start.strftime('%b'), 'sales': sales})
 
-    # Best sellers
-    from ..models import OrderItem
-    best_sellers = db.session.query(
-        Product.name,
-        func.count(OrderItem.id).label('count')
-    ).join(OrderItem, OrderItem.product_id == Product.id)\
-     .group_by(Product.id, Product.name)\
-     .order_by(func.count(OrderItem.id).desc())\
-     .limit(5).all()
+    # Best sellers from embedded order items
+    pipeline = [
+        {'$unwind': '$items'},
+        {'$group': {'_id': '$items.product_id', 'count': {'$sum': 1}}},
+        {'$sort': {'count': -1}},
+        {'$limit': 5},
+    ]
+    best_raw = list(col['orders'].aggregate(pipeline))
+    best_sellers = []
+    for b in best_raw:
+        p = Product.find_by_id(str(b['_id'])) if b['_id'] else None
+        best_sellers.append({'name': p.name if p else 'Unknown', 'count': b['count']})
 
-    return jsonify({
-        'monthly_sales': monthly_sales,
-        'best_sellers': [{'name': b[0], 'count': b[1]} for b in best_sellers],
-    })
+    return jsonify({'monthly_sales': monthly_sales, 'best_sellers': best_sellers})

@@ -1,176 +1,539 @@
+"""
+MongoDB document helpers for PrintHeaven.
+
+Instead of SQLAlchemy ORM classes, each "model" here is a plain Python class
+with:
+  - A `collection` class attribute (the MongoDB collection name)
+  - Static/class helper methods (find_by_*, create, etc.)
+  - A `to_dict()` instance method that serialises for JSON responses
+
+All _id values are stored as strings so the frontend doesn't need bson.ObjectId
+handling. PyMongo auto-creates `_id` as ObjectId; we convert to str on the way out.
+"""
+
 from datetime import datetime, timedelta
 import bcrypt
-from ..extensions import db
+import secrets
+from bson import ObjectId
+from ..extensions import get_db
 
 
-class TimestampMixin:
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _str_id(doc):
+    """Mutate doc in-place: convert _id ObjectId → string, return doc."""
+    if doc and '_id' in doc:
+        doc['_id'] = str(doc['_id'])
+    return doc
 
 
-class User(TimestampMixin, db.Model):
-    __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    phone = db.Column(db.String(20))
-    password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), default='customer', nullable=False)
-    is_active = db.Column(db.Boolean, default=True)
-    avatar = db.Column(db.String(500))
+def _now():
+    return datetime.utcnow()
 
-    # --- Authentication state -------------------------------------------------
-    email_verified = db.Column(db.Boolean, default=False, nullable=False, index=True)
-    phone_verified = db.Column(db.Boolean, default=False, nullable=False, index=True)
-    last_login = db.Column(db.DateTime)
-    # Bumped on every password change / logout-everywhere; tokens issued before
-    # the current value are treated as stale.
-    token_version = db.Column(db.Integer, default=1, nullable=False)
 
-    orders = db.relationship('Order', backref='user', lazy='dynamic')
-    cart_items = db.relationship('CartItem', backref='user', lazy='dynamic')
-    wishlist_items = db.relationship('WishlistItem', backref='user', lazy='dynamic')
-    reviews = db.relationship('Review', backref='user', lazy='dynamic')
-    notifications = db.relationship('Notification', backref='user', lazy='dynamic')
-    addresses = db.relationship('Address', backref='user', lazy='dynamic')
-    auth_tokens = db.relationship('AuthToken', backref='user', lazy='dynamic',
-                                  cascade='all, delete-orphan')
+# ---------------------------------------------------------------------------
+# User
+# ---------------------------------------------------------------------------
 
-    # --- Password handling ----------------------------------------------------
+class User:
+    COLLECTION = 'users'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    # ---- properties --------------------------------------------------------
+    @property
+    def id(self):
+        return str(self._doc.get('_id', ''))
+
+    @property
+    def name(self):        return self._doc.get('name', '')
+    @property
+    def email(self):       return self._doc.get('email', '')
+    @property
+    def phone(self):       return self._doc.get('phone')
+    @property
+    def password_hash(self): return self._doc.get('password_hash', '')
+    @property
+    def role(self):        return self._doc.get('role', 'customer')
+    @property
+    def is_active(self):   return self._doc.get('is_active', True)
+    @property
+    def avatar(self):      return self._doc.get('avatar')
+    @property
+    def email_verified(self): return self._doc.get('email_verified', False)
+    @property
+    def phone_verified(self): return self._doc.get('phone_verified', False)
+    @property
+    def last_login(self):  return self._doc.get('last_login')
+    @property
+    def token_version(self): return self._doc.get('token_version', 1)
+
+    # ---- password ----------------------------------------------------------
     @staticmethod
     def hash_password(password: str) -> str:
         return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
-
-    def set_password(self, password: str):
-        self.password_hash = self.hash_password(password)
-        # Invalidate all previously issued tokens.
-        self.token_version = (self.token_version or 0) + 1
 
     def check_password(self, password: str) -> bool:
         if not self.password_hash:
             return False
         try:
-            return bcrypt.checkpw(password.encode('utf-8'),
-                                 self.password_hash.encode('utf-8'))
+            return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
         except (ValueError, TypeError):
-            # Legacy werkzeug PBKDF2 hashes fall back gracefully.
-            return self._check_legacy_password(password)
+            try:
+                from werkzeug.security import check_password_hash
+                return check_password_hash(self.password_hash, password)
+            except Exception:
+                return False
 
-    def _check_legacy_password(self, password: str) -> bool:
+    # ---- DB helpers --------------------------------------------------------
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_email(cls, email: str):
+        doc = cls._col().find_one({'email': email})
+        return cls(doc) if doc else None
+
+    @classmethod
+    def find_by_id(cls, user_id: str):
         try:
-            from werkzeug.security import check_password_hash
-            return check_password_hash(self.password_hash, password)
+            doc = cls._col().find_one({'_id': ObjectId(user_id)})
+        except Exception:
+            return None
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {
+            'name': kwargs['name'],
+            'email': kwargs['email'],
+            'phone': kwargs.get('phone', ''),
+            'password_hash': kwargs['password_hash'],
+            'role': kwargs.get('role', 'customer'),
+            'is_active': True,
+            'avatar': None,
+            'email_verified': kwargs.get('email_verified', False),
+            'phone_verified': False,
+            'last_login': None,
+            'token_version': 1,
+            'created_at': now,
+            'updated_at': now,
+        }
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def save(self):
+        """Persist current _doc state back to MongoDB."""
+        self._doc['updated_at'] = _now()
+        self._col().replace_one({'_id': self._doc['_id']}, self._doc)
+
+    def set_password(self, password: str):
+        self._doc['password_hash'] = self.hash_password(password)
+        self._doc['token_version'] = (self.token_version or 0) + 1
+
+    def bump_token_version(self):
+        self._doc['token_version'] = (self.token_version or 0) + 1
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'phone': self.phone,
+            'role': self.role,
+            'avatar': self.avatar,
+            'email_verified': self.email_verified,
+            'phone_verified': self.phone_verified,
+            'last_login': self.last_login.isoformat() if self.last_login else None,
+        }
+
+
+# ---------------------------------------------------------------------------
+# AuthToken
+# ---------------------------------------------------------------------------
+
+class AuthToken:
+    COLLECTION = 'auth_tokens'
+    VERIFICATION_TTL = timedelta(hours=24)
+    RESET_TTL = timedelta(hours=1)
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):            return str(self._doc.get('_id', ''))
+    @property
+    def user_id(self):       return self._doc.get('user_id')
+    @property
+    def purpose(self):       return self._doc.get('purpose')
+    @property
+    def token_hash(self):    return self._doc.get('token_hash', '')
+    @property
+    def expires_at(self):    return self._doc.get('expires_at')
+    @property
+    def used_at(self):       return self._doc.get('used_at')
+    @property
+    def created_at(self):    return self._doc.get('created_at', _now())
+    @property
+    def is_expired(self) -> bool:
+        return _now() >= self.expires_at if self.expires_at else True
+    @property
+    def is_used(self) -> bool:
+        return self.used_at is not None
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @staticmethod
+    def generate():
+        raw = secrets.token_urlsafe(32)
+        hashed = bcrypt.hashpw(raw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        return raw, hashed
+
+    def verify(self, raw: str) -> bool:
+        try:
+            return bcrypt.checkpw(raw.encode('utf-8'), self.token_hash.encode('utf-8'))
         except Exception:
             return False
 
+    @classmethod
+    def create(cls, user_id: str, purpose: str, token_hash: str, expires_at: datetime, **kwargs):
+        now = _now()
+        doc = {
+            'user_id': user_id,
+            'purpose': purpose,
+            'token_hash': token_hash,
+            'expires_at': expires_at,
+            'used_at': None,
+            'created_at': now,
+            'phone': kwargs.get('phone'),
+            'phone_otp_hash': None,
+            'phone_otp_attempts': 0,
+            'otp_attempts': 0,
+        }
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    @classmethod
+    def find_unused_by_purpose(cls, purpose: str, limit=50):
+        cursor = cls._col().find(
+            {'purpose': purpose, 'used_at': None}
+        ).sort('created_at', -1).limit(limit)
+        return [cls(d) for d in cursor]
+
+    @classmethod
+    def find_unused_for_user(cls, user_id: str, purpose: str):
+        doc = cls._col().find_one({'user_id': user_id, 'purpose': purpose, 'used_at': None})
+        return cls(doc) if doc else None
+
+    @classmethod
+    def find_recent_for_user(cls, user_id: str, purpose: str, since: datetime):
+        doc = cls._col().find_one({
+            'user_id': user_id,
+            'purpose': purpose,
+            'created_at': {'$gte': since},
+        })
+        return cls(doc) if doc else None
+
+    @classmethod
+    def invalidate_all(cls, user_id: str, purpose: str):
+        """Mark all unused tokens for this user+purpose as used."""
+        cls._col().update_many(
+            {'user_id': user_id, 'purpose': purpose, 'used_at': None},
+            {'$set': {'used_at': _now()}},
+        )
+
+    def mark_used(self):
+        self._doc['used_at'] = _now()
+        self._col().update_one(
+            {'_id': self._doc['_id']},
+            {'$set': {'used_at': self._doc['used_at']}},
+        )
+
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'email': self.email,
-                'phone': self.phone, 'role': self.role, 'avatar': self.avatar,
-                'email_verified': self.email_verified,
-                'phone_verified': self.phone_verified,
-                'last_login': self.last_login.isoformat() if self.last_login else None}
+        return {
+            'id': self.id, 'user_id': self.user_id, 'purpose': self.purpose,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'used_at': self.used_at.isoformat() if self.used_at else None,
+        }
 
 
-class Product(TimestampMixin, db.Model):
-    __tablename__ = 'products'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    slug = db.Column(db.String(200), unique=True, nullable=False, index=True)
-    type = db.Column(db.String(50), nullable=False)          # category: Round Neck / Polo / Oversized / Hoodies
-    description = db.Column(db.Text)
-    material = db.Column(db.String(200))
-    fit = db.Column(db.String(100))
-    base_price = db.Column(db.Numeric(10, 2), nullable=False)
-    images = db.Column(db.JSON, default=list)
-    colours = db.Column(db.JSON, default=list)
-    sizes = db.Column(db.JSON, default=list)
-    rating = db.Column(db.Float, default=0.0)
-    review_count = db.Column(db.Integer, default=0)
-    is_featured = db.Column(db.Boolean, default=False)
-    is_new = db.Column(db.Boolean, default=False)
-    is_active = db.Column(db.Boolean, default=True)
-    tags = db.Column(db.JSON, default=list)
+# ---------------------------------------------------------------------------
+# Product
+# ---------------------------------------------------------------------------
 
-    # Catalog enrichment
-    audiences = db.Column(db.JSON, default=list)   # subset of ['kids', 'adults']
-    gsm = db.Column(db.Integer)                    # fabric weight
-    fabric = db.Column(db.String(200))             # e.g. "100% RL Combed Cotton"
-    coming_soon = db.Column(db.Boolean, default=False)
+class Product:
+    COLLECTION = 'products'
 
-    variants = db.relationship('ProductVariant', backref='product', lazy='dynamic',
-                               cascade='all, delete-orphan')
-    inventory = db.relationship('Inventory', backref='product', lazy='dynamic')
-    reviews = db.relationship('Review', backref='product', lazy='dynamic')
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def name(self):         return self._doc.get('name', '')
+    @property
+    def slug(self):         return self._doc.get('slug', '')
+    @property
+    def type(self):         return self._doc.get('type', '')
+    @property
+    def description(self):  return self._doc.get('description')
+    @property
+    def material(self):     return self._doc.get('material')
+    @property
+    def fit(self):          return self._doc.get('fit')
+    @property
+    def base_price(self):   return float(self._doc.get('base_price', 0))
+    @property
+    def images(self):       return self._doc.get('images', [])
+    @property
+    def colours(self):      return self._doc.get('colours', [])
+    @property
+    def sizes(self):        return self._doc.get('sizes', [])
+    @property
+    def rating(self):       return float(self._doc.get('rating', 0.0))
+    @property
+    def review_count(self): return self._doc.get('review_count', 0)
+    @property
+    def is_featured(self):  return self._doc.get('is_featured', False)
+    @property
+    def is_new(self):       return self._doc.get('is_new', False)
+    @property
+    def is_active(self):    return self._doc.get('is_active', True)
+    @property
+    def tags(self):         return self._doc.get('tags', [])
+    @property
+    def audiences(self):    return self._doc.get('audiences', [])
+    @property
+    def gsm(self):          return self._doc.get('gsm')
+    @property
+    def fabric(self):       return self._doc.get('fabric')
+    @property
+    def coming_soon(self):  return self._doc.get('coming_soon', False)
+    @property
+    def created_at(self):   return self._doc.get('created_at', _now())
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_all(cls, query=None):
+        docs = cls._col().find(query or {})
+        return [cls(d) for d in docs]
+
+    @classmethod
+    def find_by_id(cls, product_id: str):
+        try:
+            doc = cls._col().find_one({'_id': ObjectId(product_id)})
+        except Exception:
+            return None
+        return cls(doc) if doc else None
+
+    @classmethod
+    def find_by_slug(cls, slug: str):
+        doc = cls._col().find_one({'slug': slug})
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {
+            'name': kwargs['name'],
+            'slug': kwargs.get('slug') or kwargs['name'].lower().replace(' ', '-'),
+            'type': kwargs['type'],
+            'description': kwargs.get('description'),
+            'material': kwargs.get('material'),
+            'fit': kwargs.get('fit'),
+            'base_price': float(kwargs['base_price']),
+            'images': kwargs.get('images', []),
+            'colours': kwargs.get('colours', []),
+            'sizes': kwargs.get('sizes', []),
+            'rating': 0.0,
+            'review_count': 0,
+            'is_featured': kwargs.get('is_featured', False),
+            'is_new': kwargs.get('is_new', False),
+            'is_active': kwargs.get('is_active', True),
+            'tags': kwargs.get('tags', []),
+            'audiences': kwargs.get('audiences', []),
+            'gsm': kwargs.get('gsm'),
+            'fabric': kwargs.get('fabric'),
+            'coming_soon': kwargs.get('coming_soon', False),
+            'created_at': now,
+            'updated_at': now,
+        }
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def save(self):
+        self._doc['updated_at'] = _now()
+        self._col().replace_one({'_id': self._doc['_id']}, self._doc)
+
+    def get_variants(self):
+        docs = get_db()['product_variants'].find({'product_id': self.id})
+        return [ProductVariant(d) for d in docs]
 
     def to_dict(self):
         return {
             'id': self.id, 'name': self.name, 'slug': self.slug, 'type': self.type,
             'description': self.description, 'material': self.material, 'fit': self.fit,
-            'base_price': float(self.base_price), 'images': self.images or [],
-            'colours': self.colours or [], 'sizes': self.sizes or [],
+            'base_price': self.base_price, 'images': self.images,
+            'colours': self.colours, 'sizes': self.sizes,
             'rating': self.rating, 'review_count': self.review_count,
-            'is_featured': self.is_featured, 'is_new': self.is_new, 'tags': self.tags or [],
-            'audiences': self.audiences or [], 'gsm': self.gsm, 'fabric': self.fabric,
+            'is_featured': self.is_featured, 'is_new': self.is_new, 'tags': self.tags,
+            'audiences': self.audiences, 'gsm': self.gsm, 'fabric': self.fabric,
             'coming_soon': self.coming_soon,
-            'variants': [v.to_dict() for v in self.variants],
+            'variants': [v.to_dict() for v in self.get_variants()],
         }
 
 
-class ProductVariant(TimestampMixin, db.Model):
-    """A purchasable variant of a product, scoped to an audience (kids/adults).
+# ---------------------------------------------------------------------------
+# ProductVariant
+# ---------------------------------------------------------------------------
 
-    Kids variants are created without sizes/price until the admin configures them;
-    those are surfaced as "Contact for Kids Pricing" and cannot be bought.
-    """
-    __tablename__ = 'product_variants'
-    id = db.Column(db.Integer, primary_key=True)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    name = db.Column(db.String(200), nullable=False)
-    slug = db.Column(db.String(200), nullable=False)
-    audience = db.Column(db.String(20), nullable=False, index=True)  # kids | adults
-    price = db.Column(db.Numeric(10, 2))                             # NULL => not yet configured
-    fabric = db.Column(db.String(200))
-    material = db.Column(db.String(200))
-    gsm = db.Column(db.Integer)
-    colours = db.Column(db.JSON, default=list)                       # [{name, hex}]
-    sizes = db.Column(db.JSON, default=list)                         # [] => not configured
-    images = db.Column(db.JSON, default=list)
-    is_active = db.Column(db.Boolean, default=True)
-    coming_soon = db.Column(db.Boolean, default=False)
-    __table_args__ = (db.UniqueConstraint('product_id', 'slug'),)
+class ProductVariant:
+    COLLECTION = 'product_variants'
 
-    inventory = db.relationship('Inventory', backref='variant', lazy='dynamic',
-                                cascade='all, delete-orphan')
+    def __init__(self, doc: dict):
+        self._doc = doc
 
     @property
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def product_id(self):   return self._doc.get('product_id', '')
+    @property
+    def name(self):         return self._doc.get('name', '')
+    @property
+    def slug(self):         return self._doc.get('slug', '')
+    @property
+    def audience(self):     return self._doc.get('audience', 'adults')
+    @property
+    def price(self):
+        p = self._doc.get('price')
+        return float(p) if p is not None else None
+    @property
+    def fabric(self):       return self._doc.get('fabric')
+    @property
+    def material(self):     return self._doc.get('material')
+    @property
+    def gsm(self):          return self._doc.get('gsm')
+    @property
+    def colours(self):      return self._doc.get('colours', [])
+    @property
+    def sizes(self):        return self._doc.get('sizes', [])
+    @property
+    def images(self):       return self._doc.get('images', [])
+    @property
+    def is_active(self):    return self._doc.get('is_active', True)
+    @property
+    def coming_soon(self):  return self._doc.get('coming_soon', False)
+    @property
     def configured(self) -> bool:
-        """True when this variant has a price and at least one size/colour."""
         return bool(self.price is not None and self.sizes and self.colours)
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_id(cls, variant_id: str):
+        try:
+            doc = cls._col().find_one({'_id': ObjectId(variant_id)})
+        except Exception:
+            return None
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {
+            'product_id': kwargs['product_id'],
+            'name': kwargs['name'],
+            'slug': kwargs['slug'],
+            'audience': kwargs.get('audience', 'adults'),
+            'price': kwargs.get('price'),
+            'fabric': kwargs.get('fabric'),
+            'material': kwargs.get('material'),
+            'gsm': kwargs.get('gsm'),
+            'colours': kwargs.get('colours', []),
+            'sizes': kwargs.get('sizes', []),
+            'images': kwargs.get('images', []),
+            'is_active': kwargs.get('is_active', True),
+            'coming_soon': kwargs.get('coming_soon', False),
+            'created_at': now,
+            'updated_at': now,
+        }
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def save(self):
+        self._doc['updated_at'] = _now()
+        self._col().replace_one({'_id': self._doc['_id']}, self._doc)
+
+    def delete(self):
+        self._col().delete_one({'_id': self._doc['_id']})
+        get_db()['inventory'].delete_many({'variant_id': self.id})
+
+    def get_inventory(self):
+        docs = get_db()['inventory'].find({'variant_id': self.id})
+        return [Inventory(d) for d in docs]
 
     def to_dict(self):
         return {
             'id': self.id, 'product_id': self.product_id, 'name': self.name,
             'slug': self.slug, 'audience': self.audience,
-            'price': float(self.price) if self.price is not None else None,
+            'price': self.price,
             'fabric': self.fabric, 'material': self.material, 'gsm': self.gsm,
-            'colours': self.colours or [], 'sizes': self.sizes or [],
-            'images': self.images or [], 'is_active': self.is_active,
-            'coming_soon': self.coming_soon,
-            'configured': self.configured,
+            'colours': self.colours, 'sizes': self.sizes,
+            'images': self.images, 'is_active': self.is_active,
+            'coming_soon': self.coming_soon, 'configured': self.configured,
         }
 
 
-class Inventory(db.Model):
-    __tablename__ = 'inventory'
-    id = db.Column(db.Integer, primary_key=True)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
-    colour = db.Column(db.String(50), nullable=False)
-    size = db.Column(db.String(10), nullable=False)
-    stock = db.Column(db.Integer, default=0, nullable=False)
-    __table_args__ = (
-        db.UniqueConstraint('product_id', 'colour', 'size', 'variant_id'),
-    )
+# ---------------------------------------------------------------------------
+# Inventory
+# ---------------------------------------------------------------------------
+
+class Inventory:
+    COLLECTION = 'inventory'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def product_id(self):   return self._doc.get('product_id')
+    @property
+    def variant_id(self):   return self._doc.get('variant_id')
+    @property
+    def colour(self):       return self._doc.get('colour', '')
+    @property
+    def size(self):         return self._doc.get('size', '')
+    @property
+    def stock(self):        return self._doc.get('stock', 0)
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def create(cls, product_id, variant_id, colour, size, stock=0):
+        doc = {'product_id': product_id, 'variant_id': variant_id,
+               'colour': colour, 'size': size, 'stock': stock}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
 
     def to_dict(self):
         return {'id': self.id, 'product_id': self.product_id,
@@ -178,74 +541,164 @@ class Inventory(db.Model):
                 'colour': self.colour, 'size': self.size, 'stock': self.stock}
 
 
-class Design(TimestampMixin, db.Model):
-    __tablename__ = 'designs'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    category = db.Column(db.String(100), nullable=False)
-    image_url = db.Column(db.String(500), nullable=False)
-    is_trending = db.Column(db.Boolean, default=False)
-    is_featured = db.Column(db.Boolean, default=False)
-    is_active = db.Column(db.Boolean, default=True)
-    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+# ---------------------------------------------------------------------------
+# CartItem
+# ---------------------------------------------------------------------------
+
+class CartItem:
+    COLLECTION = 'cart_items'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):              return str(self._doc.get('_id', ''))
+    @property
+    def user_id(self):         return self._doc.get('user_id')
+    @property
+    def product_id(self):      return self._doc.get('product_id')
+    @property
+    def variant_id(self):      return self._doc.get('variant_id')
+    @property
+    def colour(self):          return self._doc.get('colour', '')
+    @property
+    def colour_hex(self):      return self._doc.get('colour_hex')
+    @property
+    def sizes(self):           return self._doc.get('sizes', [])
+    @property
+    def front_design(self):    return self._doc.get('front_design')
+    @property
+    def back_design(self):     return self._doc.get('back_design')
+    @property
+    def front_dimensions(self): return self._doc.get('front_dimensions')
+    @property
+    def back_dimensions(self): return self._doc.get('back_dimensions')
+    @property
+    def base_price(self):      return float(self._doc.get('base_price', 0))
+    @property
+    def front_print_cost(self): return float(self._doc.get('front_print_cost', 0))
+    @property
+    def back_print_cost(self): return float(self._doc.get('back_print_cost', 0))
+    @property
+    def delivery_cost(self):   return float(self._doc.get('delivery_cost', 0))
+    @property
+    def total(self):           return float(self._doc.get('total', 0))
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_user(cls, user_id: str):
+        return [cls(d) for d in cls._col().find({'user_id': user_id})]
+
+    @classmethod
+    def find_by_id(cls, item_id: str):
+        try:
+            doc = cls._col().find_one({'_id': ObjectId(item_id)})
+        except Exception:
+            return None
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {**kwargs, 'created_at': now, 'updated_at': now}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def delete(self):
+        self._col().delete_one({'_id': self._doc['_id']})
+
+    def get_product(self):
+        return Product.find_by_id(self.product_id)
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'category': self.category,
-                'image_url': self.image_url, 'is_trending': self.is_trending,
-                'is_featured': self.is_featured, 'is_active': self.is_active}
-
-
-class CartItem(TimestampMixin, db.Model):
-    __tablename__ = 'cart_items'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
-    colour = db.Column(db.String(50), nullable=False)
-    colour_hex = db.Column(db.String(10))
-    sizes = db.Column(db.JSON, nullable=False)
-    front_design = db.Column(db.Text)
-    back_design = db.Column(db.Text)
-    front_dimensions = db.Column(db.JSON)
-    back_dimensions = db.Column(db.JSON)
-    base_price = db.Column(db.Numeric(10, 2), nullable=False)
-    front_print_cost = db.Column(db.Numeric(10, 2), default=0)
-    back_print_cost = db.Column(db.Numeric(10, 2), default=0)
-    delivery_cost = db.Column(db.Numeric(10, 2), default=0)
-    total = db.Column(db.Numeric(10, 2), nullable=False)
-
-    product = db.relationship('Product')
-
-    def to_dict(self):
+        product = self.get_product()
         return {
             'id': self.id, 'variant_id': self.variant_id,
-            'product': self.product.to_dict() if self.product else None,
+            'product': product.to_dict() if product else None,
             'colour': self.colour, 'colour_hex': self.colour_hex, 'sizes': self.sizes,
             'front_design': self.front_design, 'back_design': self.back_design,
             'front_dimensions': self.front_dimensions, 'back_dimensions': self.back_dimensions,
-            'base_price': float(self.base_price), 'front_print_cost': float(self.front_print_cost),
-            'back_print_cost': float(self.back_print_cost), 'delivery_cost': float(self.delivery_cost),
-            'total': float(self.total),
+            'base_price': self.base_price, 'front_print_cost': self.front_print_cost,
+            'back_print_cost': self.back_print_cost, 'delivery_cost': self.delivery_cost,
+            'total': self.total,
         }
 
 
-class Address(TimestampMixin, db.Model):
-    __tablename__ = 'addresses'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    full_name = db.Column(db.String(120), nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
-    email = db.Column(db.String(120))
-    line1 = db.Column(db.String(300), nullable=False)
-    line2 = db.Column(db.String(300))
-    area = db.Column(db.String(100), nullable=False)
-    city = db.Column(db.String(100), nullable=False)
-    state = db.Column(db.String(100), nullable=False)
-    pincode = db.Column(db.String(10), nullable=False)
-    gst = db.Column(db.String(20))
-    company = db.Column(db.String(200))
-    instructions = db.Column(db.Text)
-    is_default = db.Column(db.Boolean, default=False)
+# ---------------------------------------------------------------------------
+# Address
+# ---------------------------------------------------------------------------
+
+class Address:
+    COLLECTION = 'addresses'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def user_id(self):      return self._doc.get('user_id')
+    @property
+    def full_name(self):    return self._doc.get('full_name', '')
+    @property
+    def phone(self):        return self._doc.get('phone', '')
+    @property
+    def email(self):        return self._doc.get('email')
+    @property
+    def line1(self):        return self._doc.get('line1', '')
+    @property
+    def line2(self):        return self._doc.get('line2')
+    @property
+    def area(self):         return self._doc.get('area', '')
+    @property
+    def city(self):         return self._doc.get('city', '')
+    @property
+    def state(self):        return self._doc.get('state', '')
+    @property
+    def pincode(self):      return self._doc.get('pincode', '')
+    @property
+    def gst(self):          return self._doc.get('gst')
+    @property
+    def company(self):      return self._doc.get('company')
+    @property
+    def instructions(self): return self._doc.get('instructions')
+    @property
+    def is_default(self):   return self._doc.get('is_default', False)
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_user(cls, user_id: str):
+        return [cls(d) for d in cls._col().find({'user_id': user_id})]
+
+    @classmethod
+    def find_by_id(cls, addr_id: str):
+        try:
+            doc = cls._col().find_one({'_id': ObjectId(addr_id)})
+        except Exception:
+            return None
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {**kwargs, 'created_at': now, 'updated_at': now}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def save(self):
+        self._doc['updated_at'] = _now()
+        self._col().replace_one({'_id': self._doc['_id']}, self._doc)
+
+    def delete(self):
+        self._col().delete_one({'_id': self._doc['_id']})
 
     def to_dict(self):
         return {
@@ -257,232 +710,441 @@ class Address(TimestampMixin, db.Model):
         }
 
 
-class Order(TimestampMixin, db.Model):
-    __tablename__ = 'orders'
-    id = db.Column(db.Integer, primary_key=True)
-    order_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    status = db.Column(db.String(50), default='placed', nullable=False)
-    subtotal = db.Column(db.Numeric(10, 2), nullable=False)
-    delivery = db.Column(db.Numeric(10, 2), default=0)
-    discount = db.Column(db.Numeric(10, 2), default=0)
-    total = db.Column(db.Numeric(10, 2), nullable=False)
-    payment_status = db.Column(db.String(30), default='pending')
-    payment_method = db.Column(db.String(30))
-    payment_id = db.Column(db.String(100))
-    coupon_code = db.Column(db.String(50))
-    address_snapshot = db.Column(db.JSON)
-    tracking_id = db.Column(db.String(100))
-    courier = db.Column(db.String(100))
-    estimated_delivery = db.Column(db.String(30))
-    special_instructions = db.Column(db.Text)
-    admin_notes = db.Column(db.Text)
+# ---------------------------------------------------------------------------
+# Order
+# ---------------------------------------------------------------------------
 
-    items = db.relationship('OrderItem', backref='order', lazy='joined', cascade='all, delete-orphan')
-    status_history = db.relationship('OrderStatusHistory', backref='order', lazy='joined',
-                                      order_by='OrderStatusHistory.created_at', cascade='all, delete-orphan')
+class Order:
+    COLLECTION = 'orders'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):                   return str(self._doc.get('_id', ''))
+    @property
+    def order_number(self):         return self._doc.get('order_number', '')
+    @property
+    def user_id(self):              return self._doc.get('user_id')
+    @property
+    def status(self):               return self._doc.get('status', 'placed')
+    @property
+    def subtotal(self):             return float(self._doc.get('subtotal', 0))
+    @property
+    def delivery(self):             return float(self._doc.get('delivery', 0))
+    @property
+    def discount(self):             return float(self._doc.get('discount', 0))
+    @property
+    def total(self):                return float(self._doc.get('total', 0))
+    @property
+    def payment_status(self):       return self._doc.get('payment_status', 'pending')
+    @property
+    def payment_method(self):       return self._doc.get('payment_method')
+    @property
+    def payment_id(self):           return self._doc.get('payment_id')
+    @property
+    def coupon_code(self):          return self._doc.get('coupon_code')
+    @property
+    def address_snapshot(self):     return self._doc.get('address_snapshot')
+    @property
+    def tracking_id(self):          return self._doc.get('tracking_id')
+    @property
+    def courier(self):              return self._doc.get('courier')
+    @property
+    def estimated_delivery(self):   return self._doc.get('estimated_delivery')
+    @property
+    def special_instructions(self): return self._doc.get('special_instructions')
+    @property
+    def admin_notes(self):          return self._doc.get('admin_notes')
+    @property
+    def items(self):                return self._doc.get('items', [])
+    @property
+    def status_history(self):       return self._doc.get('status_history', [])
+    @property
+    def created_at(self):           return self._doc.get('created_at', _now())
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_user(cls, user_id: str):
+        return [cls(d) for d in cls._col().find({'user_id': user_id}).sort('created_at', -1)]
+
+    @classmethod
+    def find_by_id(cls, order_id: str):
+        try:
+            doc = cls._col().find_one({'_id': ObjectId(order_id)})
+        except Exception:
+            return None
+        return cls(doc) if doc else None
+
+    @classmethod
+    def find_by_number(cls, order_number: str):
+        doc = cls._col().find_one({'order_number': order_number})
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {
+            'order_number': kwargs['order_number'],
+            'user_id': kwargs['user_id'],
+            'status': kwargs.get('status', 'placed'),
+            'subtotal': float(kwargs['subtotal']),
+            'delivery': float(kwargs.get('delivery', 0)),
+            'discount': float(kwargs.get('discount', 0)),
+            'total': float(kwargs['total']),
+            'payment_status': kwargs.get('payment_status', 'pending'),
+            'payment_method': kwargs.get('payment_method'),
+            'payment_id': kwargs.get('payment_id'),
+            'coupon_code': kwargs.get('coupon_code'),
+            'address_snapshot': kwargs.get('address_snapshot'),
+            'tracking_id': None,
+            'courier': None,
+            'estimated_delivery': None,
+            'special_instructions': kwargs.get('special_instructions'),
+            'admin_notes': None,
+            'items': kwargs.get('items', []),          # embedded order items
+            'status_history': [{'status': 'placed', 'note': '', 'timestamp': now.isoformat()}],
+            'created_at': now,
+            'updated_at': now,
+        }
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def save(self):
+        self._doc['updated_at'] = _now()
+        self._col().replace_one({'_id': self._doc['_id']}, self._doc)
 
     def to_dict(self):
         return {
             'id': self.id, 'order_number': self.order_number, 'status': self.status,
-            'subtotal': float(self.subtotal), 'delivery': float(self.delivery),
-            'discount': float(self.discount), 'total': float(self.total),
+            'subtotal': self.subtotal, 'delivery': self.delivery,
+            'discount': self.discount, 'total': self.total,
             'payment_status': self.payment_status, 'payment_method': self.payment_method,
             'address': self.address_snapshot, 'tracking_id': self.tracking_id,
             'courier': self.courier, 'estimated_delivery': self.estimated_delivery,
-            'created_at': self.created_at.isoformat(),
-            'items': [i.to_dict() for i in self.items],
-            'status_history': [h.to_dict() for h in self.status_history],
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+            'items': self.items,
+            'status_history': self.status_history,
         }
 
 
-class OrderItem(db.Model):
-    __tablename__ = 'order_items'
-    id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
-    product_snapshot = db.Column(db.JSON)
-    colour = db.Column(db.String(50))
-    colour_hex = db.Column(db.String(10))
-    sizes = db.Column(db.JSON)
-    front_design = db.Column(db.Text)
-    back_design = db.Column(db.Text)
-    front_dimensions = db.Column(db.JSON)
-    back_dimensions = db.Column(db.JSON)
-    base_price = db.Column(db.Numeric(10, 2))
-    front_print_cost = db.Column(db.Numeric(10, 2), default=0)
-    back_print_cost = db.Column(db.Numeric(10, 2), default=0)
-    total = db.Column(db.Numeric(10, 2))
+# ---------------------------------------------------------------------------
+# Coupon
+# ---------------------------------------------------------------------------
 
-    product = db.relationship('Product')
+class Coupon:
+    COLLECTION = 'coupons'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def code(self):         return self._doc.get('code', '')
+    @property
+    def type(self):         return self._doc.get('type', 'flat')
+    @property
+    def value(self):        return float(self._doc.get('value', 0))
+    @property
+    def min_order(self):    return float(self._doc.get('min_order', 0))
+    @property
+    def max_uses(self):     return self._doc.get('max_uses')
+    @property
+    def used_count(self):   return self._doc.get('used_count', 0)
+    @property
+    def expiry(self):       return self._doc.get('expiry')
+    @property
+    def is_active(self):    return self._doc.get('is_active', True)
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_code(cls, code: str):
+        doc = cls._col().find_one({'code': code.upper()})
+        return cls(doc) if doc else None
+
+    def save(self):
+        self._col().replace_one({'_id': self._doc['_id']}, self._doc)
 
     def to_dict(self):
         return {
-            'id': self.id, 'product': self.product_snapshot or (self.product.to_dict() if self.product else None),
-            'colour': self.colour, 'colour_hex': self.colour_hex, 'sizes': self.sizes,
-            'front_design': self.front_design, 'back_design': self.back_design,
-            'front_dimensions': self.front_dimensions, 'back_dimensions': self.back_dimensions,
-            'base_price': float(self.base_price or 0), 'front_print_cost': float(self.front_print_cost or 0),
-            'back_print_cost': float(self.back_print_cost or 0), 'total': float(self.total or 0),
+            'code': self.code, 'type': self.type, 'value': self.value,
+            'min_order': self.min_order,
+            'expiry': self.expiry.isoformat() if isinstance(self.expiry, datetime) else self.expiry,
         }
 
 
-class OrderStatusHistory(db.Model):
-    __tablename__ = 'order_status_history'
-    id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
-    status = db.Column(db.String(50), nullable=False)
-    note = db.Column(db.Text)
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+# ---------------------------------------------------------------------------
+# Review
+# ---------------------------------------------------------------------------
+
+class Review:
+    COLLECTION = 'reviews'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def user_id(self):      return self._doc.get('user_id')
+    @property
+    def product_id(self):   return self._doc.get('product_id')
+    @property
+    def order_id(self):     return self._doc.get('order_id')
+    @property
+    def rating(self):       return self._doc.get('rating', 5)
+    @property
+    def text(self):         return self._doc.get('text')
+    @property
+    def image(self):        return self._doc.get('image')
+    @property
+    def is_verified(self):  return self._doc.get('is_verified', False)
+    @property
+    def is_approved(self):  return self._doc.get('is_approved', False)
+    @property
+    def created_at(self):   return self._doc.get('created_at', _now())
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_product(cls, product_id: str):
+        return [cls(d) for d in cls._col().find({'product_id': product_id, 'is_approved': True})]
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {**kwargs, 'is_verified': False, 'is_approved': False, 'created_at': now, 'updated_at': now}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
 
     def to_dict(self):
-        return {'status': self.status, 'note': self.note, 'timestamp': self.created_at.isoformat()}
-
-
-class Coupon(TimestampMixin, db.Model):
-    __tablename__ = 'coupons'
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    type = db.Column(db.String(20), nullable=False)  # percentage | flat
-    value = db.Column(db.Numeric(10, 2), nullable=False)
-    min_order = db.Column(db.Numeric(10, 2), default=0)
-    max_uses = db.Column(db.Integer)
-    used_count = db.Column(db.Integer, default=0)
-    expiry = db.Column(db.DateTime)
-    is_active = db.Column(db.Boolean, default=True)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
-
-    def to_dict(self):
-        return {'code': self.code, 'type': self.type, 'value': float(self.value),
-                'min_order': float(self.min_order), 'expiry': self.expiry.isoformat() if self.expiry else None}
-
-
-class Review(TimestampMixin, db.Model):
-    __tablename__ = 'reviews'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'))
-    rating = db.Column(db.Integer, nullable=False)
-    text = db.Column(db.Text)
-    image = db.Column(db.String(500))
-    is_verified = db.Column(db.Boolean, default=False)
-    is_approved = db.Column(db.Boolean, default=False)
-
-    def to_dict(self):
+        user = User.find_by_id(self.user_id)
         return {
             'id': self.id, 'rating': self.rating, 'text': self.text, 'image': self.image,
-            'is_verified': self.is_verified, 'created_at': self.created_at.isoformat(),
-            'user': self.user.to_dict() if self.user else None,
+            'is_verified': self.is_verified,
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+            'user': user.to_dict() if user else None,
         }
 
 
-class WishlistItem(db.Model):
-    __tablename__ = 'wishlist_items'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    product = db.relationship('Product')
+# ---------------------------------------------------------------------------
+# WishlistItem
+# ---------------------------------------------------------------------------
 
+class WishlistItem:
+    COLLECTION = 'wishlist_items'
 
-class Notification(db.Model):
-    __tablename__ = 'notifications'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    title = db.Column(db.String(200), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    type = db.Column(db.String(50))
-    is_read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {'id': self.id, 'title': self.title, 'message': self.message,
-                'type': self.type, 'is_read': self.is_read, 'created_at': self.created_at.isoformat()}
-
-
-class Enquiry(TimestampMixin, db.Model):
-    __tablename__ = 'enquiries'
-    id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(120), nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
-    email = db.Column(db.String(120), nullable=False)
-    company = db.Column(db.String(200))
-    enquiry_type = db.Column(db.String(50))
-    quantity = db.Column(db.Integer)
-    message = db.Column(db.Text, nullable=False)
-    is_resolved = db.Column(db.Boolean, default=False)
-
-    def to_dict(self):
-        return {'id': self.id, 'full_name': self.full_name, 'phone': self.phone,
-                'email': self.email, 'company': self.company, 'enquiry_type': self.enquiry_type,
-                'quantity': self.quantity, 'message': self.message, 'created_at': self.created_at.isoformat()}
-
-
-class Setting(db.Model):
-    __tablename__ = 'settings'
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(100), unique=True, nullable=False)
-    value = db.Column(db.Text)
-    type = db.Column(db.String(20), default='string')
-
-
-class AuthToken(db.Model):
-    """Secure, single-use, time-limited tokens for email verification and
-    password reset.
-
-    Only a hash of the token is stored, so a database leak never exposes
-    usable tokens. ``used_at`` marks single-use consumption.
-
-    The ``phone_otp_*`` columns carry the phone-verification side-channel: a
-    short-lived numeric code plus its own attempt counter.
-    """
-    __tablename__ = 'auth_tokens'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
-    purpose = db.Column(db.String(20), nullable=False, index=True)  # verify_email | reset_password | verify_email_otp
-    token_hash = db.Column(db.String(256), unique=True, nullable=False, index=True)
-    expires_at = db.Column(db.DateTime, nullable=False, index=True)
-    used_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    # --- Phone OTP (secondary channel) --------------------------------------
-    phone = db.Column(db.String(20), index=True)
-    phone_otp_hash = db.Column(db.String(256))
-    phone_otp_attempts = db.Column(db.Integer, default=0, nullable=False)
-    phone_otp_last_sent_at = db.Column(db.DateTime)
-    last_otp_at = db.Column(db.DateTime)
-    otp_attempts = db.Column(db.Integer, default=0, nullable=False)
-
-    VERIFICATION_TTL = timedelta(hours=24)
-    RESET_TTL = timedelta(hours=1)
-
-    @staticmethod
-    def generate():
-        """Return (raw_token, hash) — only the hash is persisted."""
-        import secrets
-        raw = secrets.token_urlsafe(32)
-        return raw, bcrypt.hashpw(raw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-    @staticmethod
-    def hash_token(raw: str) -> str:
-        return bcrypt.hashpw(raw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-    def verify(self, raw: str) -> bool:
-        return bcrypt.checkpw(raw.encode('utf-8'), self.token_hash.encode('utf-8'))
+    def __init__(self, doc: dict):
+        self._doc = doc
 
     @property
-    def is_expired(self) -> bool:
-        return datetime.utcnow() >= self.expires_at
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def user_id(self):      return self._doc.get('user_id')
+    @property
+    def product_id(self):   return self._doc.get('product_id')
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_user(cls, user_id: str):
+        return [cls(d) for d in cls._col().find({'user_id': user_id})]
+
+    @classmethod
+    def find_one(cls, user_id: str, product_id: str):
+        doc = cls._col().find_one({'user_id': user_id, 'product_id': product_id})
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, user_id: str, product_id: str):
+        doc = {'user_id': user_id, 'product_id': product_id, 'created_at': _now()}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def delete(self):
+        self._col().delete_one({'_id': self._doc['_id']})
+
+    def get_product(self):
+        return Product.find_by_id(self.product_id)
+
+
+# ---------------------------------------------------------------------------
+# Notification
+# ---------------------------------------------------------------------------
+
+class Notification:
+    COLLECTION = 'notifications'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
 
     @property
-    def is_used(self) -> bool:
-        return self.used_at is not None
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def user_id(self):      return self._doc.get('user_id')
+    @property
+    def title(self):        return self._doc.get('title', '')
+    @property
+    def message(self):      return self._doc.get('message', '')
+    @property
+    def type(self):         return self._doc.get('type')
+    @property
+    def is_read(self):      return self._doc.get('is_read', False)
+    @property
+    def created_at(self):   return self._doc.get('created_at', _now())
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_by_user(cls, user_id: str):
+        return [cls(d) for d in cls._col().find({'user_id': user_id}).sort('created_at', -1)]
+
+    @classmethod
+    def create(cls, user_id, title, message, type=None):
+        doc = {'user_id': user_id, 'title': title, 'message': message,
+               'type': type, 'is_read': False, 'created_at': _now()}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def mark_read(self):
+        self._doc['is_read'] = True
+        self._col().update_one({'_id': self._doc['_id']}, {'$set': {'is_read': True}})
 
     def to_dict(self):
         return {
-            'id': self.id, 'user_id': self.user_id, 'purpose': self.purpose,
-            'expires_at': self.expires_at.isoformat(), 'used_at':
-                self.used_at.isoformat() if self.used_at else None,
+            'id': self.id, 'title': self.title, 'message': self.message,
+            'type': self.type, 'is_read': self.is_read,
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Enquiry
+# ---------------------------------------------------------------------------
+
+class Enquiry:
+    COLLECTION = 'enquiries'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):               return str(self._doc.get('_id', ''))
+    @property
+    def full_name(self):        return self._doc.get('full_name', '')
+    @property
+    def phone(self):            return self._doc.get('phone', '')
+    @property
+    def email(self):            return self._doc.get('email', '')
+    @property
+    def company(self):          return self._doc.get('company')
+    @property
+    def enquiry_type(self):     return self._doc.get('enquiry_type')
+    @property
+    def quantity(self):         return self._doc.get('quantity')
+    @property
+    def message(self):          return self._doc.get('message', '')
+    @property
+    def is_resolved(self):      return self._doc.get('is_resolved', False)
+    @property
+    def created_at(self):       return self._doc.get('created_at', _now())
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {**kwargs, 'is_resolved': False, 'created_at': now, 'updated_at': now}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'full_name': self.full_name, 'phone': self.phone,
+            'email': self.email, 'company': self.company, 'enquiry_type': self.enquiry_type,
+            'quantity': self.quantity, 'message': self.message,
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Design
+# ---------------------------------------------------------------------------
+
+class Design:
+    COLLECTION = 'designs'
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    @property
+    def id(self):           return str(self._doc.get('_id', ''))
+    @property
+    def name(self):         return self._doc.get('name', '')
+    @property
+    def category(self):     return self._doc.get('category', '')
+    @property
+    def image_url(self):    return self._doc.get('image_url', '')
+    @property
+    def is_trending(self):  return self._doc.get('is_trending', False)
+    @property
+    def is_featured(self):  return self._doc.get('is_featured', False)
+    @property
+    def is_active(self):    return self._doc.get('is_active', True)
+    @property
+    def uploaded_by(self):  return self._doc.get('uploaded_by')
+
+    @classmethod
+    def _col(cls):
+        return get_db()[cls.COLLECTION]
+
+    @classmethod
+    def find_all_active(cls):
+        return [cls(d) for d in cls._col().find({'is_active': True})]
+
+    @classmethod
+    def find_by_id(cls, design_id: str):
+        try:
+            doc = cls._col().find_one({'_id': ObjectId(design_id)})
+        except Exception:
+            return None
+        return cls(doc) if doc else None
+
+    @classmethod
+    def create(cls, **kwargs):
+        now = _now()
+        doc = {**kwargs, 'is_active': True, 'created_at': now, 'updated_at': now}
+        result = cls._col().insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return cls(doc)
+
+    def save(self):
+        self._doc['updated_at'] = _now()
+        self._col().replace_one({'_id': self._doc['_id']}, self._doc)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'name': self.name, 'category': self.category,
+            'image_url': self.image_url, 'is_trending': self.is_trending,
+            'is_featured': self.is_featured, 'is_active': self.is_active,
         }

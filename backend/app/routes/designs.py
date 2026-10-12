@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify, current_app, send_from_directory
+from flask import Blueprint, request, jsonify, current_app, send_from_directory, abort
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..extensions import db
 from ..models import Design
+from ..extensions import get_db
 from ..utils.auth import admin_required
 from ..utils.uploads import save_upload
+from bson import ObjectId
 import os
 
 designs_bp = Blueprint('designs', __name__)
@@ -12,11 +13,11 @@ designs_bp = Blueprint('designs', __name__)
 @designs_bp.route('', methods=['GET'])
 def get_designs():
     category = request.args.get('category')
-    q = Design.query.filter_by(is_active=True)
+    query = {'is_active': True}
     if category and category != 'All':
-        q = q.filter_by(category=category)
-    designs = q.order_by(Design.is_trending.desc(), Design.created_at.desc()).all()
-    return jsonify([d.to_dict() for d in designs])
+        query['category'] = category
+    docs = list(get_db()['designs'].find(query).sort([('is_trending', -1), ('created_at', -1)]))
+    return jsonify([Design(d).to_dict() for d in docs])
 
 
 @designs_bp.route('/upload', methods=['POST'])
@@ -36,35 +37,37 @@ def upload_design():
 @admin_required
 def create_design():
     data = request.get_json()
-    design = Design(
+    design = Design.create(
         name=data['name'], category=data['category'],
         image_url=data['image_url'],
         is_trending=data.get('is_trending', False),
         is_featured=data.get('is_featured', False),
     )
-    db.session.add(design)
-    db.session.commit()
     return jsonify(design.to_dict()), 201
 
 
-@designs_bp.route('/<int:design_id>', methods=['PUT'])
+@designs_bp.route('/<string:design_id>', methods=['PUT'])
 @admin_required
 def update_design(design_id):
-    design = Design.query.get_or_404(design_id)
+    design = Design.find_by_id(design_id)
+    if not design:
+        abort(404)
     data = request.get_json()
     for field in ['name', 'category', 'image_url', 'is_trending', 'is_featured', 'is_active']:
         if field in data:
-            setattr(design, field, data[field])
-    db.session.commit()
+            design._doc[field] = data[field]
+    design.save()
     return jsonify(design.to_dict())
 
 
-@designs_bp.route('/<int:design_id>', methods=['DELETE'])
+@designs_bp.route('/<string:design_id>', methods=['DELETE'])
 @admin_required
 def delete_design(design_id):
-    design = Design.query.get_or_404(design_id)
-    design.is_active = False
-    db.session.commit()
+    design = Design.find_by_id(design_id)
+    if not design:
+        abort(404)
+    design._doc['is_active'] = False
+    design.save()
     return jsonify({'message': 'Design deactivated'})
 
 
