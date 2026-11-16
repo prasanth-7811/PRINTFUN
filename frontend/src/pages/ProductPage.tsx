@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Heart, ShieldCheck, Truck, RotateCcw, Star } from 'lucide-react'
+import { Heart, ShieldCheck, Truck, RotateCcw, Star, Box } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
 import { CURRENCY, BRAND, PLACEHOLDER_IMAGE } from '../config/brand'
@@ -258,26 +258,34 @@ export default function ProductPage() {
             )}
 
             {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-8">
-              <Link
-                to={customizeLink}
-                className="flex-1 bg-black text-white py-3.5 rounded-xl font-semibold text-sm text-center hover:bg-zinc-800 transition-colors"
-              >
-                Customize This {product.type === 'Hoodies' ? 'Hoodie' : 'T-Shirt'}
-              </Link>
+            <div className="flex flex-col gap-3 mb-8">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  to={`${customizeLink}&view3d=true`}
+                  className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-semibold text-sm text-center hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-98"
+                >
+                  <Box size={18} /> Customize in 3D
+                </Link>
+                <Link
+                  to={customizeLink}
+                  className="flex-1 bg-black text-white py-3.5 rounded-xl font-semibold text-sm text-center hover:bg-zinc-800 transition-colors"
+                >
+                  2D Studio
+                </Link>
+              </div>
               <button
                 onClick={handleAddToCart}
                 disabled={unconfigured || comingSoon || totalQty === 0 || adding}
-                className="flex-1 border-2 border-black text-black py-3.5 rounded-xl font-semibold text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full border-2 border-black text-black py-3.5 rounded-xl font-semibold text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {unconfigured ? 'Not Available' : adding ? 'Adding…' : 'Add to Cart'}
+                {unconfigured ? 'Not Available' : adding ? 'Adding…' : 'Quick Add Plain'}
               </button>
             </div>
 
             {/* Trust badges */}
             <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
               <div className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-green-500" /> Secure Checkout</div>
-              <div className="flex items-center gap-1.5"><Truck size={14} className="text-blue-500" /> Free delivery above ₹999</div>
+              <div className="flex items-center gap-1.5"><Truck size={14} className="text-blue-500" /> Reliable Courier Delivery</div>
               <div className="flex items-center gap-1.5"><RotateCcw size={14} className="text-purple-500" /> 7-day return policy</div>
             </div>
           </div>
