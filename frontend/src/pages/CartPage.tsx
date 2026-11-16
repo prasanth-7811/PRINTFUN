@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Trash2, Edit2, ShoppingBag, Tag, ArrowRight } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
-import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
+import { CURRENCY, PLACEHOLDER_IMAGE, PRINT_OPTIONS } from '../config/brand'
 import api from '../services/api'
 
 export default function CartPage() {
@@ -30,7 +30,7 @@ export default function CartPage() {
     }
   }
 
-  const delivery = total >= 999 ? 0 : 79
+  const delivery = items.reduce((sum, item) => sum + (item.delivery_cost || 0), 0)
   const finalTotal = total + delivery - discount
 
   if (count === 0) {
@@ -93,15 +93,22 @@ export default function CartPage() {
                     <div className="flex gap-1.5 mt-2">
                       {item.front_design && <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">Front Print</span>}
                       {item.back_design && <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Back Print</span>}
+                      {(item as any).print_option_id && (item as any).print_option_id !== 'none' && (
+                        <span className="text-xs bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-full">
+                          {PRINT_OPTIONS.find(o => o.id === (item as any).print_option_id)?.label || 'Custom Print'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Price breakdown */}
                 <div className="mt-4 pt-4 border-t border-zinc-50 grid grid-cols-3 gap-2 text-xs text-zinc-500">
-                  <div><span className="block text-zinc-400">Base</span><span className="font-semibold text-zinc-700">{CURRENCY}{item.base_price}</span></div>
-                  {item.front_print_cost > 0 && <div><span className="block text-zinc-400">Front Print</span><span className="font-semibold text-zinc-700">{CURRENCY}{item.front_print_cost}</span></div>}
-                  {item.back_print_cost > 0 && <div><span className="block text-zinc-400">Back Print</span><span className="font-semibold text-zinc-700">{CURRENCY}{item.back_print_cost}</span></div>}
+                  <div><span className="block text-zinc-400">Product</span><span className="font-semibold text-zinc-700">{CURRENCY}{item.base_price}</span></div>
+                  {(item.front_print_cost > 0 || item.back_print_cost > 0) && (
+                    <div><span className="block text-zinc-400">Printing</span><span className="font-semibold text-zinc-700">{CURRENCY}{item.front_print_cost + item.back_print_cost}</span></div>
+                  )}
+                  <div><span className="block text-zinc-400">Courier</span><span className="font-semibold text-zinc-700">{CURRENCY}{item.delivery_cost || 0}</span></div>
                   <div className="col-span-3 flex justify-end">
                     <span className="font-bold text-zinc-900 text-sm">{CURRENCY}{item.total}</span>
                   </div>
@@ -134,7 +141,7 @@ export default function CartPage() {
               <div className="space-y-2.5 text-sm">
                 <div className="flex justify-between text-zinc-600"><span>Subtotal</span><span>{CURRENCY}{total}</span></div>
                 <div className="flex justify-between text-zinc-600">
-                  <span>Delivery</span>
+                  <span>Courier</span>
                   <span>{delivery === 0 ? <span className="text-green-600 font-medium">Free</span> : `${CURRENCY}${delivery}`}</span>
                 </div>
                 {discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{CURRENCY}{discount}</span></div>}

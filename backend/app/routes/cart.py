@@ -5,17 +5,44 @@ from ..extensions import get_db
 
 cart_bp = Blueprint('cart', __name__)
 
-FRONT_PRINT = 149
-BACK_PRINT = 149
-DELIVERY_BASE = 79
-FREE_DELIVERY_ABOVE = 999
+# Printing charges (INR) — must match frontend PRINT_OPTIONS in brand.ts
+PRINT_CHARGES = {
+    'none':            {'front': 0,   'back': 0},
+    'logo_only':       {'front': 70,  'back': 0},
+    'front_print':     {'front': 100, 'back': 0},
+    'back_print':      {'front': 0,   'back': 100},
+    'front_logo_back': {'front': 70,  'back': 80},
+    'full_front_back': {'front': 100, 'back': 100},
+}
+
+# Kids Round Neck courier is fixed at ₹80; all others come from admin settings
+COURIER_KIDS_ROUND_NECK = 80
 
 
-def calc_total(base_price, has_front, has_back, total_qty):
-    print_cost = (FRONT_PRINT if has_front else 0) + (BACK_PRINT if has_back else 0)
+def get_courier_charge(product, variant, delivery_cost_override=None):
+    """Return courier charge for this product/variant combination."""
+    if delivery_cost_override is not None:
+        return delivery_cost_override
+    if product and product.type == 'Round Neck' and variant and getattr(variant, 'audience', None) == 'kids':
+        return COURIER_KIDS_ROUND_NECK
+    # Fetch from admin settings
+    from ..extensions import get_db
+    setting = get_db()['settings'].find_one({'key': 'delivery_base'})
+    if setting:
+        try:
+            return int(setting['value'])
+        except (ValueError, TypeError):
+            pass
+    return 80  # safe default
+
+
+def calc_total(base_price, print_option_id, total_qty, courier):
+    charges = PRINT_CHARGES.get(print_option_id or 'none', PRINT_CHARGES['none'])
+    front_cost = charges['front']
+    back_cost = charges['back']
+    print_cost = front_cost + back_cost
     subtotal = (base_price + print_cost) * max(total_qty, 1)
-    delivery = 0 if subtotal >= FREE_DELIVERY_ABOVE else DELIVERY_BASE
-    return subtotal, delivery, subtotal + delivery
+    return subtotal, courier, subtotal + courier, front_cost, back_cost
 
 
 def resolve_price(data, product):
@@ -46,6 +73,7 @@ def add_to_cart():
         abort(404)
     sizes = data.get('sizes', {})
     total_qty = sum(v for v in sizes.values() if v > 0)
+    print_option_id = data.get('print_option_id', 'none')
     has_front = bool(data.get('front_design'))
     has_back = bool(data.get('back_design'))
 
@@ -57,7 +85,10 @@ def add_to_cart():
     if variant is None and product.coming_soon:
         return jsonify({'message': 'This product is coming soon and cannot be ordered yet.'}), 400
 
-    subtotal, delivery, total = calc_total(unit_price, has_front, has_back, total_qty)
+    # Use client-provided delivery_cost if present (already calculated with correct logic)
+    delivery_cost_override = data.get('delivery_cost')
+    courier = get_courier_charge(product, variant, delivery_cost_override)
+    subtotal, delivery, total, front_cost, back_cost = calc_total(unit_price, print_option_id, total_qty, courier)
 
     item = CartItem.create(
         user_id=user_id,
@@ -70,9 +101,10 @@ def add_to_cart():
         back_design=data.get('back_design'),
         front_dimensions=data.get('front_dimensions'),
         back_dimensions=data.get('back_dimensions'),
+        print_option_id=print_option_id,
         base_price=unit_price,
-        front_print_cost=FRONT_PRINT if has_front else 0,
-        back_print_cost=BACK_PRINT if has_back else 0,
+        front_print_cost=front_cost,
+        back_print_cost=back_cost,
         delivery_cost=delivery,
         total=total,
     )
@@ -94,13 +126,15 @@ def update_cart_item(item_id):
         item._doc['front_design'] = data['front_design']
     if 'back_design' in data:
         item._doc['back_design'] = data['back_design']
+    if 'print_option_id' in data:
+        item._doc['print_option_id'] = data['print_option_id']
 
     total_qty = sum(v for v in item.sizes.values() if v > 0)
-    has_front = bool(item.front_design)
-    has_back = bool(item.back_design)
-    subtotal, delivery, total = calc_total(float(item.base_price), has_front, has_back, total_qty)
-    item._doc['front_print_cost'] = FRONT_PRINT if has_front else 0
-    item._doc['back_print_cost'] = BACK_PRINT if has_back else 0
+    print_option_id = item._doc.get('print_option_id', 'none')
+    courier = item._doc.get('delivery_cost', 80)
+    subtotal, delivery, total, front_cost, back_cost = calc_total(float(item.base_price), print_option_id, total_qty, courier)
+    item._doc['front_print_cost'] = front_cost
+    item._doc['back_print_cost'] = back_cost
     item._doc['delivery_cost'] = delivery
     item._doc['total'] = total
 

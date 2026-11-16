@@ -17,27 +17,30 @@ export default function AdminSettingsPage() {
   const [saved, setSaved] = useState(false)
   const [settings, setSettings] = useState({
     store_name: 'PRINTHEAVEN',
-    store_email: 'hello@printheaven.co.in',
+    store_email: 'printheavenstudio@gmail.com',
     store_phone: '9600650612',
     store_address: 'Chennai, Tamil Nadu, India',
     whatsapp_number: '9600650612',
     instagram_url: 'https://instagram.com/printheaven',
     facebook_url: 'https://facebook.com/printheaven',
     youtube_url: 'https://youtube.com/@printheaven',
-    // Pricing
-    base_tshirt_price: 599,
-    front_print_price: 149,
-    back_print_price: 149,
-    delivery_base: 79,
-    delivery_per_extra: 20,
-    free_delivery_above: 999,
+    // Pricing — product base prices
+    price_round_neck_kids: 299,
+    price_round_neck_mens: 399,
+    price_polo_mens: 499,
+    price_polo_poly_cotton: 399,
+    price_hoodie: 599,
+    // Printing charges
+    print_logo_only: 70,
+    print_front: 100,
+    print_back: 100,
+    print_front_logo_back: 150,
+    print_full_front_back: 200,
+    // Courier
+    courier_kids_round_neck: 80,
+    delivery_base: 80,
     // Delivery
-    delivery_zones: [
-      { name: 'Local (Chennai)', min_days: 1, max_days: 2, charge: 50 },
-      { name: 'Tamil Nadu', min_days: 2, max_days: 3, charge: 79 },
-      { name: 'South India', min_days: 3, max_days: 4, charge: 99 },
-      { name: 'Rest of India', min_days: 4, max_days: 6, charge: 129 },
-    ],
+    delivery_base: 80,
     // Payment
     upi_enabled: true,
     card_enabled: true,
@@ -84,19 +87,7 @@ export default function AdminSettingsPage() {
     }
   }
 
-  const addDeliveryZone = () => {
-    setSettings(prev => ({
-      ...prev,
-      delivery_zones: [...prev.delivery_zones, { name: '', min_days: 1, max_days: 2, charge: 0 }]
-    }))
-  }
-
-  const removeDeliveryZone = (index: number) => {
-    setSettings(prev => ({
-      ...prev,
-      delivery_zones: prev.delivery_zones.filter((_, i) => i !== index)
-    }))
-  }
+  const addDeliveryZone = () => {}
 
   return (
     <div className="space-y-6">
@@ -162,13 +153,32 @@ export default function AdminSettingsPage() {
         {/* Pricing */}
         {activeTab === 'pricing' && (
           <div className="space-y-6">
-            <h3 className="font-semibold text-zinc-900">Pricing Configuration</h3>
-            <p className="text-sm text-zinc-500">All prices in INR (₹)</p>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <h3 className="font-semibold text-zinc-900">Product Base Prices (₹)</h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
-                { label: 'Base T-Shirt Price', key: 'base_tshirt_price' },
-                { label: 'Front Print Price', key: 'front_print_price' },
-                { label: 'Back Print Price', key: 'back_print_price' },
+                { label: 'Round Neck — Kids', key: 'price_round_neck_kids' },
+                { label: "Round Neck — Men's", key: 'price_round_neck_mens' },
+                { label: "Polo — Men's", key: 'price_polo_mens' },
+                { label: 'Polo — Poly Cotton', key: 'price_polo_poly_cotton' },
+                { label: 'Hoodie', key: 'price_hoodie' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="text-sm font-medium text-zinc-700 mb-1.5 block">{f.label}</label>
+                  <input type="number" value={settings[f.key]} onChange={e => updateSetting(f.key, Number(e.target.value))} min={0}
+                    className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+                </div>
+              ))}
+            </div>
+
+            <h3 className="font-semibold text-zinc-900 mt-6">Printing Charges (₹)</h3>
+            <p className="text-xs text-zinc-400">Charged per order (not per piece)</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                { label: 'Logo Only', key: 'print_logo_only' },
+                { label: 'Front Print', key: 'print_front' },
+                { label: 'Back Print', key: 'print_back' },
+                { label: 'Front Logo + Back Print', key: 'print_front_logo_back' },
+                { label: 'Full Front + Full Back', key: 'print_full_front_back' },
               ].map(f => (
                 <div key={f.key}>
                   <label className="text-sm font-medium text-zinc-700 mb-1.5 block">{f.label}</label>
@@ -183,69 +193,21 @@ export default function AdminSettingsPage() {
         {/* Delivery */}
         {activeTab === 'delivery' && (
           <div className="space-y-6">
-            <h3 className="font-semibold text-zinc-900">Delivery Rules</h3>
-            <div className="grid sm:grid-cols-2 gap-4 mb-6">
-              {[
-                { label: 'Base Delivery Charge', key: 'delivery_base' },
-                { label: 'Extra Item Charge', key: 'delivery_per_extra' },
-                { label: 'Free Delivery Above', key: 'free_delivery_above' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="text-sm font-medium text-zinc-700 mb-1.5 block">{f.label} (₹)</label>
-                  <input type="number" value={settings[f.key]} onChange={e => updateSetting(f.key, Number(e.target.value))} min={0}
-                    className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                </div>
-              ))}
+            <h3 className="font-semibold text-zinc-900">Courier Charges (₹)</h3>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+              Kids Round Neck courier is fixed at ₹80 and cannot be changed here.
             </div>
-
-            <h3 className="font-semibold text-zinc-900">Delivery Zones</h3>
-            <div className="space-y-3">
-              {settings.delivery_zones.map((zone: any, idx: number) => (
-                <div key={idx} className="grid grid-cols-1 sm:grid-cols-5 gap-3 p-4 border border-zinc-100 rounded-xl">
-                  <div className="sm:col-span-2">
-                    <label className="text-sm font-medium text-zinc-700 mb-1.5 block">Zone Name</label>
-                    <input value={zone.name} onChange={e => {
-                      const newZones = [...settings.delivery_zones]
-                      newZones[idx] = { ...newZones[idx], name: e.target.value }
-                      updateSetting('delivery_zones', newZones)
-                    }} placeholder="Zone name"
-                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-zinc-700 mb-1.5 block">Min Days</label>
-                    <input type="number" value={zone.min_days} onChange={e => {
-                      const newZones = [...settings.delivery_zones]
-                      newZones[idx] = { ...newZones[idx], min_days: Number(e.target.value) }
-                      updateSetting('delivery_zones', newZones)
-                    }} min={1} max={30}
-                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-zinc-700 mb-1.5 block">Max Days</label>
-                    <input type="number" value={zone.max_days} onChange={e => {
-                      const newZones = [...settings.delivery_zones]
-                      newZones[idx] = { ...newZones[idx], max_days: Number(e.target.value) }
-                      updateSetting('delivery_zones', newZones)
-                    }} min={1} max={30}
-                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                  </div>
-                  <div className="flex items-end">
-                    <label className="text-sm font-medium text-zinc-700 mb-1.5 block w-full">Charge (₹)</label>
-                    <input type="number" value={zone.charge} onChange={e => {
-                      const newZones = [...settings.delivery_zones]
-                      newZones[idx] = { ...newZones[idx], charge: Number(e.target.value) }
-                      updateSetting('delivery_zones', newZones)
-                    }} min={0}
-                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                  </div>
-                  <div className="sm:col-span-5 flex justify-end">
-                    <button onClick={() => removeDeliveryZone(idx)} className="text-sm text-red-500 hover:text-red-700 font-medium">Remove</button>
-                  </div>
-                </div>
-              ))}
-              <button onClick={addDeliveryZone} className="w-full py-2 border-2 border-dashed border-zinc-200 rounded-xl text-sm font-medium text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 transition-colors">
-                + Add Delivery Zone
-              </button>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-zinc-700 mb-1.5 block">Kids Round Neck Courier (fixed)</label>
+                <input type="number" value={80} disabled
+                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm bg-zinc-50 text-zinc-400 cursor-not-allowed" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-zinc-700 mb-1.5 block">All Other Products — Courier Charge</label>
+                <input type="number" value={settings['delivery_base']} onChange={e => updateSetting('delivery_base', Number(e.target.value))} min={0}
+                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+              </div>
             </div>
           </div>
         )}

@@ -17,7 +17,7 @@ export default function CheckoutPage() {
     full_name: '', phone: '', email: '', line1: '', line2: '', area: '', city: '', state: 'Tamil Nadu', pincode: '', gst: '', company: '', instructions: ''
   })
 
-  const delivery = total >= 999 ? 0 : 79
+  const delivery = items.reduce((sum, item) => sum + (item.delivery_cost || 0), 0)
   const finalTotal = total + delivery
 
   const set = (k: keyof Address) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -173,7 +173,7 @@ export default function CheckoutPage() {
             </div>
             <div className="border-t border-zinc-100 pt-3 space-y-2 text-sm">
               <div className="flex justify-between text-zinc-600"><span>Subtotal</span><span>{CURRENCY}{total}</span></div>
-              <div className="flex justify-between text-zinc-600"><span>Delivery</span><span>{delivery === 0 ? <span className="text-green-600">Free</span> : `${CURRENCY}${delivery}`}</span></div>
+              <div className="flex justify-between text-zinc-600"><span>Courier</span><span>{delivery === 0 ? <span className="text-green-600">Free</span> : `${CURRENCY}${delivery}`}</span></div>
               <div className="flex justify-between font-bold text-zinc-900 pt-1 border-t border-zinc-100"><span>Total</span><span>{CURRENCY}{finalTotal}</span></div>
             </div>
           </div>

@@ -10,7 +10,7 @@ import QualityIndicator from '../components/studio/QualityIndicator'
 import type { CanvasDesign, Audience } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
-import { PRINT_AREA } from '../config/brand'
+import { PRINT_AREA, PRINT_OPTIONS, COURIER_KIDS_ROUND_NECK, type PrintOptionId } from '../config/brand'
 import { productService } from '../services/products'
 import {
   type StudioView,
@@ -64,6 +64,8 @@ export default function DesignStudioPage() {
   const [letterSpacing, setLetterSpacing] = useState(0)
   const [addingToCart, setAddingToCart] = useState(false)
   const [lockAspect, setLockAspect] = useState(true)
+  const [printOptionId, setPrintOptionId] = useState<PrintOptionId>('none')
+  const [courierCharge, setCourierCharge] = useState<number | null>(null)
 
   // --- Resolve the product + variant being customised ---------------------
   const productIdParam = searchParams.get('product')
@@ -95,6 +97,27 @@ export default function DesignStudioPage() {
   const productSizes = variant?.sizes?.length ? variant.sizes : (product?.sizes?.length ? product.sizes : FALLBACK_SIZES)
   const unitPrice = variant?.price ?? product?.base_price ?? FALLBACK_PRICE
   const buyable = !!(variant && variant.configured && !variant.coming_soon && !product?.coming_soon)
+
+  // Determine courier charge: ₹80 fixed for kids round neck, else fetch from admin settings
+  const isKidsRoundNeck = product?.type === 'Round Neck' && variant?.audience === 'kids'
+  useEffect(() => {
+    if (isKidsRoundNeck) { setCourierCharge(COURIER_KIDS_ROUND_NECK); return }
+    import('../services/api').then(({ default: api }) => {
+      api.get('/admin/settings').then(r => {
+        setCourierCharge(r.data.delivery_base ?? null)
+      }).catch(() => setCourierCharge(null))
+    })
+  }, [isKidsRoundNeck])
+
+  // Auto-select print option based on which sides have designs
+  useEffect(() => {
+    const hasFront = frontDesigns.length > 0
+    const hasBack = backDesigns.length > 0
+    if (!hasFront && !hasBack) { setPrintOptionId('none'); return }
+    if (hasFront && hasBack) { setPrintOptionId('full_front_back'); return }
+    if (hasFront) { setPrintOptionId('front_print'); return }
+    if (hasBack) { setPrintOptionId('back_print'); return }
+  }, [frontDesigns.length, backDesigns.length])
 
   // Keep the chosen colour inside the variant's available colours.
   useEffect(() => {
@@ -274,6 +297,7 @@ export default function DesignStudioPage() {
 
     setAddingToCart(true)
     try {
+      const selectedOption = PRINT_OPTIONS.find(o => o.id === printOptionId) || PRINT_OPTIONS[0]
       await addItem({
         product_id: Number(searchParams.get('product') || 1),
         variant_id: variant?.id,
@@ -286,6 +310,10 @@ export default function DesignStudioPage() {
         back_dimensions: backDesigns.length
           ? largestDesignCm('back', backDesigns)
           : PRINT_AREA.back,
+        print_option_id: printOptionId,
+        front_print_cost: selectedOption.frontCost,
+        back_print_cost: selectedOption.backCost,
+        delivery_cost: courierCharge ?? 0,
       })
       navigate('/cart')
     } catch {
@@ -572,11 +600,32 @@ export default function DesignStudioPage() {
               )}
             </div>
 
+            {/* Print Option Selector */}
+            <div className="bg-white rounded-2xl border border-zinc-100 p-4">
+              <h3 className="font-semibold text-sm text-zinc-900 mb-3">Printing Option</h3>
+              <div className="space-y-2">
+                {PRINT_OPTIONS.filter(o => o.id !== 'none').map(opt => (
+                  <label key={opt.id} className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                    printOptionId === opt.id ? 'border-black bg-zinc-50' : 'border-zinc-100 hover:border-zinc-300'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <input type="radio" name="printOption" value={opt.id}
+                        checked={printOptionId === opt.id}
+                        onChange={() => setPrintOptionId(opt.id as PrintOptionId)}
+                        className="text-black" />
+                      <span className="text-xs font-medium text-zinc-800">{opt.label}</span>
+                    </div>
+                    <span className="text-xs font-bold text-zinc-700">+₹{opt.frontCost + opt.backCost}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <PricePanel
               basePrice={unitPrice}
-              hasFront={frontDesigns.length > 0}
-              hasBack={backDesigns.length > 0}
+              printOptionId={printOptionId}
               totalQty={totalQty}
+              courierCharge={courierCharge ?? 0}
               couponDiscount={0}
             />
 

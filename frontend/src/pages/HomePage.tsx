@@ -19,8 +19,8 @@ const FAQ_ITEMS = [
   { question: 'What file formats are supported?', answer: 'We support PNG, JPG, and JPEG formats. PNG is recommended for designs with transparent backgrounds.' },
   { question: 'Can I print different designs on front and back?', answer: 'Absolutely. Our Design Studio lets you customize the front and back independently with different designs, sizes, and positions.' },
   { question: 'Can I choose different sizes in one order?', answer: 'Yes! You can add multiple size-quantity combinations in a single order. For example: M×2, L×3, XL×1 — all in one checkout.' },
-  { question: 'How is printing price calculated?', answer: 'Printing cost is ₹149 per side. Front-only, back-only, or front+back options are available. The base T-shirt price is added separately.' },
-  { question: 'How is delivery calculated?', answer: 'Delivery starts at ₹79 and is calculated based on your location and order quantity. Orders above ₹999 qualify for free delivery.' },
+  { question: 'How is printing price calculated?', answer: 'Printing charges depend on the option you choose: Logo Only (₹70), Front Print (₹100), Back Print (₹100), Front Logo + Back Print (₹150), or Full Front + Full Back (₹200). These are added to the base product price.' },
+  { question: 'How is delivery calculated?', answer: 'Kids Round Neck T-Shirts have a fixed courier charge of ₹80. For all other products, courier charges are set by the store and shown at checkout. There is no free delivery threshold — courier is always charged.' },
   { question: 'Can I change my design after ordering?', answer: 'Design changes are not possible after the design has been approved for printing. You can request changes during the design review stage.' },
   { question: 'How long does production take?', answer: 'Production typically takes 3–5 business days after design approval. Delivery takes an additional 2–4 business days depending on your location.' },
   { question: 'Can I track my order?', answer: 'Yes! Once your order is shipped, you will receive a tracking ID and courier details. You can track your order in real-time from your account.' },
@@ -186,8 +186,8 @@ export default function HomePage() {
               </div>
               <div className="absolute -bottom-4 -left-4 bg-white rounded-2xl p-4 shadow-xl">
                 <p className="text-xs text-zinc-400 mb-1">Live Price</p>
-                <p className="text-2xl font-black text-zinc-900">{CURRENCY}897</p>
-                <p className="text-xs text-green-600 font-medium">Front + Back Print</p>
+                <p className="text-2xl font-black text-zinc-900">{CURRENCY}699</p>
+                <p className="text-xs text-green-600 font-medium">Round Neck + Front Print</p>
               </div>
             </div>
           </div>

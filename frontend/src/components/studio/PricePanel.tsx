@@ -1,26 +1,24 @@
-import { CURRENCY, PRICING } from '../../config/brand'
+import { CURRENCY, PRINT_OPTIONS, type PrintOptionId } from '../../config/brand'
 
 interface Props {
   basePrice: number
-  hasFront: boolean
-  hasBack: boolean
+  printOptionId: PrintOptionId
   totalQty: number
+  courierCharge: number   // passed from parent — 80 for kids round neck, admin value for others
   couponDiscount: number
 }
 
-export default function PricePanel({ basePrice, hasFront, hasBack, totalQty, couponDiscount }: Props) {
+export default function PricePanel({ basePrice, printOptionId, totalQty, courierCharge, couponDiscount }: Props) {
   const qty = Math.max(totalQty, 1)
-  const frontCost = hasFront ? PRICING.frontPrint : 0
-  const backCost = hasBack ? PRICING.backPrint : 0
-  const subtotal = (basePrice + frontCost + backCost) * qty
-  const delivery = subtotal >= PRICING.freeDeliveryAbove ? 0 : PRICING.deliveryBase + Math.max(0, (qty - 1)) * PRICING.deliveryPerExtra
-  const total = subtotal + delivery - couponDiscount
+  const option = PRINT_OPTIONS.find(o => o.id === printOptionId) || PRINT_OPTIONS[0]
+  const printCost = option.frontCost + option.backCost
+  const subtotal = (basePrice + printCost) * qty
+  const total = subtotal + courierCharge - couponDiscount
 
   const rows = [
-    { label: `T-Shirt Base (×${qty})`, value: basePrice * qty },
-    hasFront ? { label: 'Front Print', value: frontCost * qty } : null,
-    hasBack ? { label: 'Back Print', value: backCost * qty } : null,
-    { label: 'Delivery', value: delivery },
+    { label: `Product (×${qty})`, value: basePrice * qty },
+    printCost > 0 ? { label: option.label, value: printCost * qty } : null,
+    { label: 'Courier', value: courierCharge },
     couponDiscount > 0 ? { label: 'Discount', value: -couponDiscount } : null,
   ].filter(Boolean) as { label: string; value: number }[]
 
@@ -36,9 +34,6 @@ export default function PricePanel({ basePrice, hasFront, hasBack, totalQty, cou
             </span>
           </div>
         ))}
-        {delivery === 0 && (
-          <p className="text-xs text-green-600 font-medium">🎉 Free delivery!</p>
-        )}
       </div>
       <div className="border-t border-zinc-200 mt-3 pt-3 flex items-center justify-between">
         <span className="font-bold text-zinc-900">Total</span>
