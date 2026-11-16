@@ -325,23 +325,19 @@ def seed_products():
     CATALOG = [
         {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-t-shirt', 'type': 'Round Neck', 'audiences': ['kids', 'adults'], 'description': 'Everyday round neck tees in combed cotton and poly cotton.', 'images': ['/products/round-neck.png'],
          'variants': [
-             {'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck', 'audience': 'adults', 'price': 170, 'fabric': '100% RL Combed Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
-             {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton', 'audience': 'adults', 'price': 95, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 180, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
-             {'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids', 'audience': 'kids', 'price': None, 'colours': [], 'sizes': [], 'images': ['/products/round-neck.png']},
+             {'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck', 'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+             {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton', 'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 180, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+             {'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids', 'audience': 'kids', 'price': 299, 'colours': colours('Black', 'White', 'Navy'), 'sizes': ['XS', 'S', 'M', 'L'], 'images': ['/products/round-neck.png']},
          ]},
         {'name': 'Polo T-Shirt', 'slug': 'polo-t-shirt', 'type': 'Polo', 'audiences': ['kids', 'adults'], 'description': 'Premium polos.', 'images': ['/products/polo.png'],
          'variants': [
-             {'name': 'Premium Polo T-Shirt', 'slug': 'premium-polo', 'audience': 'adults', 'price': 270, 'fabric': '100% RL Combed Cotton', 'material': 'Pique', 'gsm': 240, 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+             {'name': "Men's Polo T-Shirt", 'slug': 'premium-polo', 'audience': 'adults', 'price': 499, 'fabric': '100% RL Combed Cotton', 'material': 'Pique', 'gsm': 240, 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+             {'name': 'Poly Cotton Polo T-Shirt', 'slug': 'polyester-mars-polo', 'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 200, 'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
              {'name': 'Polo T-Shirt — Kids', 'slug': 'polo-kids', 'audience': 'kids', 'price': None, 'colours': [], 'sizes': [], 'images': ['/products/polo.png']},
-         ]},
-        {'name': 'Oversized T-Shirt', 'slug': 'oversized-t-shirt', 'type': 'Oversized', 'audiences': ['kids', 'adults'], 'description': 'Drop-shoulder oversized fits.', 'images': ['/products/oversized.png'],
-         'variants': [
-             {'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry', 'audience': 'adults', 'price': 240, 'fabric': '100% RL Combed Cotton', 'material': 'French Terry', 'gsm': 240, 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink', 'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
-             {'name': 'Oversized T-Shirt — Kids', 'slug': 'oversized-kids', 'audience': 'kids', 'price': None, 'colours': [], 'sizes': [], 'images': ['/products/oversized.png']},
          ]},
         {'name': 'Hoodies', 'slug': 'hoodies', 'type': 'Hoodies', 'audiences': ['adults'], 'description': 'Heavyweight loopknit-raised hoodies.', 'images': ['/products/hoodie.png'],
          'variants': [
-             {'name': 'Regular Hoodie', 'slug': 'regular-hoodie', 'audience': 'adults', 'price': 400, 'fabric': '100% Cotton', 'material': 'Loopknit Raised', 'gsm': 300, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
+             {'name': 'Regular Hoodie', 'slug': 'regular-hoodie', 'audience': 'adults', 'price': 599, 'fabric': '100% Cotton', 'material': 'Loopknit Raised', 'gsm': 300, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
          ]},
     ]
 
