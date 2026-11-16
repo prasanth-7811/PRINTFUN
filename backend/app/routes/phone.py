@@ -15,9 +15,9 @@ from ..extensions import db, limiter
 from ..models import User, AuthToken
 from ..utils.auth import get_current_user
 from ..utils.sms import send_sms, SmsError
-from ..utils.otp import (generate_otp, hash_otp, verify_tp_otp, normalize_phone,
-                         OTP_TTL_MINUTES, OTP_RESEND_COOLDOWN_SECONDS,
-                         OTP_MAX_ATTEMPTS)
+from ..utils.otp import (normalize_phone, OTP_TTL_MINUTES,
+                         OTP_RESEND_COOLDOWN_SECONDS, OTP_MAX_ATTEMPTS)
+from ..utils.supabase_otp import issue_supabase_otp, verify_supabase_otp
 
 phone_bp = Blueprint('phone', __name__)
 
@@ -82,23 +82,8 @@ def send_otp():
                                    'before requesting another.',
                         'retry_after': OTP_RESEND_COOLDOWN_SECONDS}), 429
 
-    raw, hashed = generate_otp()
-    now = datetime.utcnow()
-
-    # One live code at a time; older codes of the same purpose are retired.
-    AuthToken.query.filter(
-        AuthToken.user_id == user.id, AuthToken.purpose == purpose,
-        AuthToken.used_at.is_(None),
-    ).update({'used_at': now})
-
-    token = AuthToken(
-        user_id=user.id, purpose=purpose, token_hash=hash_otp(raw),
-        phone=phone, phone_otp_hash=hashed,
-        expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
-        last_otp_at=now, phone_otp_last_sent_at=now,
-    )
-    db.session.add(token)
-    db.session.commit()
+    # Issue secure OTP recorded directly in Supabase PostgreSQL
+    raw, token = issue_supabase_otp(user, purpose=purpose, phone=phone)
 
     delivered = 'none'
     try:
@@ -112,17 +97,19 @@ def send_otp():
     if current_app.config.get('DEV_RETURN_TOKEN'):
         return jsonify({'message': 'A verification code has been sent to your number.',
                         'delivery': delivered, 'otp': raw,
+                        'verified_provider': 'supabase',
                         'cooldown_seconds': OTP_RESEND_COOLDOWN_SECONDS}), 200
 
     return jsonify({'message': 'A verification code has been sent to your number.',
                     'delivery': delivered,
+                    'verified_provider': 'supabase',
                     'cooldown_seconds': OTP_RESEND_COOLDOWN_SECONDS}), 200
 
 
 @phone_bp.route('/verify-otp', methods=['POST'])
 @limiter.limit('10 per minute')
 def verify_otp():
-    """Redeem a code. Marks the account's number verified and issues a session."""
+    """Redeem a code. Marks the account's number verified in Supabase and issues a session."""
     data = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip().lower()
     phone = normalize_phone((data.get('phone') or '').strip())
@@ -141,42 +128,22 @@ def verify_otp():
         # Generic response — never reveal whether the account exists.
         return jsonify({'message': 'Invalid or expired verification code.'}), 400
 
-    token = AuthToken.query.filter(
-        AuthToken.user_id == user.id,
-        AuthToken.purpose == purpose,
-        AuthToken.used_at.is_(None),
-    ).order_by(AuthToken.created_at.desc()).first()
-
-    if token is None:
-        return jsonify({'message': 'Invalid or expired verification code.'}), 400
-
-    if token.is_expired:
-        return jsonify({'message': 'This verification code has expired. '
-                                   'Request a new one.', 'expired': True}), 410
-
-    token.phone_otp_attempts = (token.phone_otp_attempts or 0) + 1
-    db.session.commit()
-
-    if token.phone_otp_attempts > OTP_MAX_ATTEMPTS:
-        token.used_at = datetime.utcnow()
-        db.session.commit()
-        return jsonify({'message': 'Too many incorrect attempts. '
-                                   'Please request a new code.'}), 429
-
-    if not verify_tp_otp(raw, token.phone_otp_hash or ''):
-        return jsonify({'mismatch': True,
-                        'message': 'Incorrect verification code.',
-                        'attempts_remaining': max(0, OTP_MAX_ATTEMPTS
-                                                  - (token.phone_otp_attempts or 0))}), 401
-
-    token.used_at = datetime.utcnow()
-    user.phone_verified = True
-    # Verification must rotate sessions; every stale token dies too.
-    user.token_version = (user.token_version or 1) + 1
-    db.session.commit()
+    # Execute Supabase verification
+    result = verify_supabase_otp(user, raw, purpose=purpose, channel='sms')
+    if not result['success']:
+        resp = {'message': result['message']}
+        if result.get('mismatch'):
+            resp['mismatch'] = True
+            resp['attempts_remaining'] = result.get('attempts_remaining')
+        if result.get('expired'):
+            resp['expired'] = True
+        return jsonify(resp), result['status_code']
 
     return jsonify({
         'message': 'PHONE VERIFIED SUCCESSFULLY',
+        'verified_via_supabase': True,
+        'verification_source': result.get('verification_source'),
+        'verified_at': result.get('verified_at'),
         'user': _user_response(user),
         'token': _issue_token(user),
     })

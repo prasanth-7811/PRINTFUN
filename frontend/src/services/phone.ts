@@ -14,6 +14,9 @@ export interface OtpVerifyResponse {
   message: string
   user: User
   token: string
+  verified_via_supabase?: boolean
+  verification_source?: string
+  verified_at?: string
 }
 
 export const phoneService = {

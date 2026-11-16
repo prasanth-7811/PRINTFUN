@@ -6,7 +6,8 @@ from flask_jwt_extended import (create_access_token, jwt_required,
 from ..extensions import db, limiter
 from ..models import User, AuthToken
 from ..utils.auth import get_current_user
-from ..utils.mail import send_verification_email, send_password_reset_email, MailError
+from ..utils.mail import send_verification_email, send_password_reset_email, send_otp_email, MailError
+from ..utils.supabase_otp import issue_supabase_otp, verify_supabase_otp
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -94,24 +95,105 @@ def register():
     ))
     db.session.commit()
 
+    # Issue 6-digit email OTP in Supabase
+    email_otp, _ = issue_supabase_otp(user, purpose='verify_email_otp', email=user.email)
+
     dev_link = None
+    dev_otp = None
     mail_error = None
     try:
         send_verification_email(user, raw)
+        try:
+            send_otp_email(user.email, user.name, email_otp)
+        except Exception:
+            pass
     except MailError as exc:
         mail_error = str(exc)
     if current_app.config.get('DEV_RETURN_TOKEN'):
         dev_link = f"{current_app.config['FRONTEND_URL']}/verify-email?token={raw}"
+        dev_otp = email_otp
 
     resp = {
         'message': 'Account created! Please check your email to verify your address.',
         'verification_required': True,
         'email': user.email,
         'verification_link': dev_link,
+        'email_otp': dev_otp,
+        'verified_provider': 'supabase',
     }
     if mail_error:
         resp['mail_error'] = mail_error
     return jsonify(resp), 201
+
+
+@auth_bp.route('/send-email-otp', methods=['POST'])
+@limiter.limit('3 per minute')
+def send_email_otp():
+    """Send a 6-digit OTP code to the user's email, recorded in Supabase."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    if not email:
+        return jsonify({'message': 'Email address is required.'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'message': 'If an account exists with this email, a verification code has been sent.',
+                        'cooldown_seconds': 60}), 200
+
+    if user.email_verified:
+        return jsonify({'message': 'This account is already verified. Please sign in.', 'already_verified': True}), 200
+
+    raw_otp, _ = issue_supabase_otp(user, purpose='verify_email_otp', email=user.email)
+
+    try:
+        send_otp_email(user.email, user.name, raw_otp)
+    except MailError:
+        return jsonify({'message': 'Failed to send verification email. Please try again.'}), 503
+
+    resp = {
+        'message': 'A 6-digit verification code has been sent to your email.',
+        'cooldown_seconds': 60,
+        'verified_provider': 'supabase',
+    }
+    if current_app.config.get('DEV_RETURN_TOKEN'):
+        resp['otp'] = raw_otp
+
+    return jsonify(resp), 200
+
+
+@auth_bp.route('/verify-email-otp', methods=['POST'])
+@limiter.limit('10 per minute')
+def verify_email_otp():
+    """Verify 6-digit email OTP directly against Supabase."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    raw_otp = (data.get('otp') or '').strip()
+
+    if not email or not raw_otp:
+        return jsonify({'message': 'Email and 6-digit verification code are required.'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'message': 'Invalid or expired verification code.'}), 400
+
+    result = verify_supabase_otp(user, raw_otp, purpose='verify_email_otp', channel='email')
+    if not result['success']:
+        resp = {'message': result['message']}
+        if result.get('mismatch'):
+            resp['mismatch'] = True
+            resp['attempts_remaining'] = result.get('attempts_remaining')
+        if result.get('expired'):
+            resp['expired'] = True
+        return jsonify(resp), result['status_code']
+
+    return jsonify({
+        'message': 'EMAIL VERIFIED SUCCESSFULLY VIA SUPABASE',
+        'verified_via_supabase': True,
+        'verification_source': result.get('verification_source'),
+        'verified_at': result.get('verified_at'),
+        'user': user.to_dict(),
+        'token': _issue_token(user),
+    })
 
 
 @auth_bp.route('/verify-email', methods=['POST'])

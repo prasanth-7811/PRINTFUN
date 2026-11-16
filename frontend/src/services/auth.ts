@@ -46,6 +46,26 @@ export const authService = {
     return res.data as { message: string; user: User; token: string }
   },
 
+  async sendEmailOtp(email: string) {
+    const res = await api.post('/auth/send-email-otp', { email })
+    return res.data as {
+      message: string
+      otp?: string
+      cooldown_seconds?: number
+      verified_provider?: string
+    }
+  },
+
+  async verifyEmailOtp(email: string, otp: string) {
+    const res = await api.post('/auth/verify-email-otp', { email, otp })
+    return res.data as {
+      message: string
+      verified_via_supabase: boolean
+      user: User
+      token: string
+    }
+  },
+
   async resendVerification(email: string) {
     const res = await api.post('/auth/resend-verification', { email })
     return res.data as {

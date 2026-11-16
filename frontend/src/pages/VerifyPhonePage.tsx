@@ -148,12 +148,15 @@ export default function VerifyPhonePage() {
     return (
       <AuthLayout title="Phone Verified">
         <div className="text-center py-4">
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-5">
+          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 size={32} className="text-green-600" />
           </div>
-          <h2 className="text-xl font-black text-zinc-900 mb-2">PHONE VERIFIED SUCCESSFULLY</h2>
+          <h2 className="text-xl font-black text-zinc-900 mb-1.5">PHONE VERIFIED SUCCESSFULLY</h2>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-semibold mb-4">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Verified with Supabase
+          </div>
           <p className="text-sm text-zinc-500 leading-relaxed mb-6">
-            Your mobile number is confirmed.<br />
+            Your mobile number is confirmed in Supabase.<br />
             Your account is now fully active.
           </p>
           <button
