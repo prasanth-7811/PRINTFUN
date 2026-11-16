@@ -1,9 +1,8 @@
 import re
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify
+from ..extensions import db
 from ..models import User
-from ..extensions import get_db
 from ..utils.auth import admin_required
-from bson import ObjectId
 
 users_bp = Blueprint('users', __name__)
 
@@ -12,10 +11,12 @@ PHONE_RE = re.compile(r'^[0-9+()\-\s]{7,20}$')
 ALLOWED_ROLES = {'customer', 'admin', 'manager', 'production', 'shipping'}
 
 
+# ── CREATE ────────────────────────────────────────────────────────────────────
 @users_bp.route('', methods=['POST'])
 @admin_required
 def create_user():
     data = request.get_json(silent=True) or {}
+
     name = (data.get('name') or '').strip()
     email = (data.get('email') or '').strip().lower()
     phone = (data.get('phone') or '').strip()
@@ -27,7 +28,7 @@ def create_user():
         errors['name'] = 'Name must be at least 2 characters.'
     if not EMAIL_RE.match(email):
         errors['email'] = 'Enter a valid email address.'
-    elif User.find_by_email(email):
+    elif User.query.filter_by(email=email).first():
         errors['email'] = 'An account with this email already exists.'
     if phone and not PHONE_RE.match(phone):
         errors['phone'] = 'Enter a valid phone number.'
@@ -38,92 +39,94 @@ def create_user():
     if errors:
         return jsonify({'message': 'Validation failed.', 'errors': errors}), 400
 
-    user = User.create(
+    user = User(
         name=name, email=email, phone=phone or None,
         password_hash=User.hash_password(password),
-        role=role, email_verified=True,
+        role=role, email_verified=True, is_active=True,
     )
-    user._doc['is_active'] = True
-    user.save()
+    db.session.add(user)
+    db.session.commit()
     return jsonify(user.to_dict()), 201
 
 
+# ── READ ALL ──────────────────────────────────────────────────────────────────
 @users_bp.route('', methods=['GET'])
 @admin_required
 def get_users():
     role = request.args.get('role')
     is_active = request.args.get('is_active')
-    query = {}
+
+    query = User.query
     if role:
-        query['role'] = role
+        query = query.filter_by(role=role)
     if is_active is not None:
-        query['is_active'] = is_active.lower() == 'true'
-    docs = list(get_db()['users'].find(query).sort('created_at', -1))
-    return jsonify([User(d).to_dict() for d in docs])
+        query = query.filter_by(is_active=is_active.lower() == 'true')
+
+    users = query.order_by(User.created_at.desc()).all()
+    return jsonify([u.to_dict() for u in users])
 
 
-@users_bp.route('/<string:user_id>', methods=['GET'])
+# ── READ ONE ──────────────────────────────────────────────────────────────────
+@users_bp.route('/<int:user_id>', methods=['GET'])
 @admin_required
 def get_user(user_id):
-    user = User.find_by_id(user_id)
-    if not user:
-        abort(404)
+    user = User.query.get_or_404(user_id)
     return jsonify(user.to_dict())
 
 
-@users_bp.route('/<string:user_id>', methods=['PUT'])
+# ── UPDATE ────────────────────────────────────────────────────────────────────
+@users_bp.route('/<int:user_id>', methods=['PUT'])
 @admin_required
 def update_user(user_id):
-    user = User.find_by_id(user_id)
-    if not user:
-        abort(404)
+    user = User.query.get_or_404(user_id)
     data = request.get_json(silent=True) or {}
 
     if 'name' in data:
         name = data['name'].strip()
         if len(name) < 2:
             return jsonify({'message': 'Name must be at least 2 characters.'}), 400
-        user._doc['name'] = name
+        user.name = name
 
     if 'email' in data:
         email = data['email'].strip().lower()
         if not EMAIL_RE.match(email):
             return jsonify({'message': 'Enter a valid email address.'}), 400
-        existing = User.find_by_email(email)
+        existing = User.query.filter_by(email=email).first()
         if existing and existing.id != user_id:
             return jsonify({'message': 'Email already in use.'}), 400
-        user._doc['email'] = email
+        user.email = email
 
     if 'phone' in data:
         phone = data['phone'].strip()
         if phone and not PHONE_RE.match(phone):
             return jsonify({'message': 'Enter a valid phone number.'}), 400
-        user._doc['phone'] = phone or None
+        user.phone = phone or None
 
     if 'role' in data:
         if data['role'] not in ALLOWED_ROLES:
             return jsonify({'message': f'Role must be one of: {", ".join(ALLOWED_ROLES)}.'}), 400
-        user._doc['role'] = data['role']
+        user.role = data['role']
 
     if 'is_active' in data:
-        user._doc['is_active'] = bool(data['is_active'])
+        user.is_active = bool(data['is_active'])
+
     if 'email_verified' in data:
-        user._doc['email_verified'] = bool(data['email_verified'])
+        user.email_verified = bool(data['email_verified'])
+
     if 'password' in data:
         if len(data['password']) < 8:
             return jsonify({'message': 'Password must be at least 8 characters.'}), 400
         user.set_password(data['password'])
 
-    user.save()
+    db.session.commit()
     return jsonify(user.to_dict())
 
 
-@users_bp.route('/<string:user_id>', methods=['DELETE'])
+# ── DELETE (soft) ─────────────────────────────────────────────────────────────
+@users_bp.route('/<int:user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id):
-    user = User.find_by_id(user_id)
-    if not user:
-        abort(404)
-    user._doc['is_active'] = False
-    user.save()
+    user = User.query.get_or_404(user_id)
+    user.is_active = False
+    db.session.commit()
     return jsonify({'message': 'User deactivated.', 'id': user_id})

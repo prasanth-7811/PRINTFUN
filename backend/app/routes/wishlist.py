@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from ..extensions import db
 from ..models import WishlistItem, Product
 
 wishlist_bp = Blueprint('wishlist', __name__)
@@ -9,14 +10,14 @@ wishlist_bp = Blueprint('wishlist', __name__)
 @jwt_required()
 def get_wishlist():
     user_id = get_jwt_identity()
-    items = WishlistItem.find_by_user(user_id)
+    items = WishlistItem.query.filter_by(user_id=user_id).all()
     result = []
     for item in items:
-        product = item.get_product()
         result.append({
             'id': item.id,
             'product_id': item.product_id,
-            'product': product.to_dict() if product else None,
+            'product': item.product.to_dict() if item.product else None,
+            'created_at': item.created_at.isoformat(),
         })
     return jsonify(result)
 
@@ -26,27 +27,27 @@ def get_wishlist():
 def add_to_wishlist():
     user_id = get_jwt_identity()
     data = request.get_json()
-    product_id = str(data.get('product_id') or '')
+    product_id = data.get('product_id')
     if not product_id:
         return jsonify({'message': 'product_id required'}), 400
 
-    if not Product.find_by_id(product_id):
-        abort(404)
+    Product.query.get_or_404(product_id)
 
-    existing = WishlistItem.find_one(user_id, product_id)
+    existing = WishlistItem.query.filter_by(user_id=user_id, product_id=product_id).first()
     if existing:
         return jsonify({'message': 'Already in wishlist'}), 409
 
-    item = WishlistItem.create(user_id=user_id, product_id=product_id)
+    item = WishlistItem(user_id=user_id, product_id=product_id)
+    db.session.add(item)
+    db.session.commit()
     return jsonify({'id': item.id, 'product_id': item.product_id}), 201
 
 
-@wishlist_bp.route('/<string:product_id>', methods=['DELETE'])
+@wishlist_bp.route('/<int:product_id>', methods=['DELETE'])
 @jwt_required()
 def remove_from_wishlist(product_id):
     user_id = get_jwt_identity()
-    item = WishlistItem.find_one(user_id, product_id)
-    if not item:
-        abort(404)
-    item.delete()
+    item = WishlistItem.query.filter_by(user_id=user_id, product_id=product_id).first_or_404()
+    db.session.delete(item)
+    db.session.commit()
     return jsonify({'message': 'Removed from wishlist'})

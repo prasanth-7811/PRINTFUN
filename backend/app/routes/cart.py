@@ -1,55 +1,35 @@
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from ..extensions import db
 from ..models import CartItem, Product, ProductVariant
-from ..extensions import get_db
+from ..utils.auth import get_current_user
 
 cart_bp = Blueprint('cart', __name__)
 
-# Printing charges (INR) — must match frontend PRINT_OPTIONS in brand.ts
-PRINT_CHARGES = {
-    'none':            {'front': 0,   'back': 0},
-    'logo_only':       {'front': 70,  'back': 0},
-    'front_print':     {'front': 100, 'back': 0},
-    'back_print':      {'front': 0,   'back': 100},
-    'front_logo_back': {'front': 70,  'back': 80},
-    'full_front_back': {'front': 100, 'back': 100},
-}
-
-# Kids Round Neck courier is fixed at ₹80; all others come from admin settings
-COURIER_KIDS_ROUND_NECK = 80
+FRONT_PRINT = 149
+BACK_PRINT = 149
+DELIVERY_BASE = 79
+FREE_DELIVERY_ABOVE = 999
 
 
-def get_courier_charge(product, variant, delivery_cost_override=None):
-    """Return courier charge for this product/variant combination."""
-    if delivery_cost_override is not None:
-        return delivery_cost_override
-    if product and product.type == 'Round Neck' and variant and getattr(variant, 'audience', None) == 'kids':
-        return COURIER_KIDS_ROUND_NECK
-    # Fetch from admin settings
-    from ..extensions import get_db
-    setting = get_db()['settings'].find_one({'key': 'delivery_base'})
-    if setting:
-        try:
-            return int(setting['value'])
-        except (ValueError, TypeError):
-            pass
-    return 80  # safe default
-
-
-def calc_total(base_price, print_option_id, total_qty, courier):
-    charges = PRINT_CHARGES.get(print_option_id or 'none', PRINT_CHARGES['none'])
-    front_cost = charges['front']
-    back_cost = charges['back']
-    print_cost = front_cost + back_cost
+def calc_total(base_price, has_front, has_back, total_qty):
+    print_cost = (FRONT_PRINT if has_front else 0) + (BACK_PRINT if has_back else 0)
     subtotal = (base_price + print_cost) * max(total_qty, 1)
-    return subtotal, courier, subtotal + courier, front_cost, back_cost
+    delivery = 0 if subtotal >= FREE_DELIVERY_ABOVE else DELIVERY_BASE
+    return subtotal, delivery, subtotal + delivery
 
 
 def resolve_price(data, product):
+    """Return the unit price for the chosen variant, or the product base price.
+
+    Kids variants that haven't been configured (no sizes/price) are never priced
+    and must not be checked out.
+    """
     variant_id = data.get('variant_id')
     if variant_id:
-        variant = ProductVariant.find_by_id(str(variant_id))
+        variant = ProductVariant.query.get(variant_id)
         if variant and variant.product_id == product.id:
+            # An unconfigured variant carries no price — the guard below rejects it.
             return (float(variant.price) if variant.price is not None else 0.0), variant
     return float(product.base_price), None
 
@@ -58,7 +38,7 @@ def resolve_price(data, product):
 @jwt_required()
 def get_cart():
     user_id = get_jwt_identity()
-    items = CartItem.find_by_user(user_id)
+    items = CartItem.query.filter_by(user_id=user_id).all()
     return jsonify([i.to_dict() for i in items])
 
 
@@ -68,29 +48,24 @@ def add_to_cart():
     user_id = get_jwt_identity()
     data = request.get_json()
 
-    product = Product.find_by_id(str(data['product_id']))
-    if not product:
-        abort(404)
+    product = Product.query.get_or_404(data['product_id'])
     sizes = data.get('sizes', {})
     total_qty = sum(v for v in sizes.values() if v > 0)
-    print_option_id = data.get('print_option_id', 'none')
     has_front = bool(data.get('front_design'))
     has_back = bool(data.get('back_design'))
 
     unit_price, variant = resolve_price(data, product)
 
+    # Unconfigured kids variants cannot be purchased.
     if variant is not None and not variant.configured:
         return jsonify({'message': 'This variant is not available for purchase yet. '
                                    'Please contact us for pricing.'}), 400
     if variant is None and product.coming_soon:
         return jsonify({'message': 'This product is coming soon and cannot be ordered yet.'}), 400
 
-    # Use client-provided delivery_cost if present (already calculated with correct logic)
-    delivery_cost_override = data.get('delivery_cost')
-    courier = get_courier_charge(product, variant, delivery_cost_override)
-    subtotal, delivery, total, front_cost, back_cost = calc_total(unit_price, print_option_id, total_qty, courier)
+    subtotal, delivery, total = calc_total(unit_price, has_front, has_back, total_qty)
 
-    item = CartItem.create(
+    item = CartItem(
         user_id=user_id,
         product_id=product.id,
         variant_id=variant.id if variant else None,
@@ -101,55 +76,51 @@ def add_to_cart():
         back_design=data.get('back_design'),
         front_dimensions=data.get('front_dimensions'),
         back_dimensions=data.get('back_dimensions'),
-        print_option_id=print_option_id,
         base_price=unit_price,
-        front_print_cost=front_cost,
-        back_print_cost=back_cost,
+        front_print_cost=FRONT_PRINT if has_front else 0,
+        back_print_cost=BACK_PRINT if has_back else 0,
         delivery_cost=delivery,
         total=total,
     )
+    db.session.add(item)
+    db.session.commit()
     return jsonify(item.to_dict()), 201
 
 
-@cart_bp.route('/<string:item_id>', methods=['PUT'])
+@cart_bp.route('/<int:item_id>', methods=['PUT'])
 @jwt_required()
 def update_cart_item(item_id):
     user_id = get_jwt_identity()
-    item = CartItem.find_by_id(item_id)
-    if not item or item.user_id != user_id:
-        abort(404)
+    item = CartItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
     data = request.get_json()
 
     if 'sizes' in data:
-        item._doc['sizes'] = data['sizes']
+        item.sizes = data['sizes']
     if 'front_design' in data:
-        item._doc['front_design'] = data['front_design']
+        item.front_design = data['front_design']
     if 'back_design' in data:
-        item._doc['back_design'] = data['back_design']
-    if 'print_option_id' in data:
-        item._doc['print_option_id'] = data['print_option_id']
+        item.back_design = data['back_design']
 
     total_qty = sum(v for v in item.sizes.values() if v > 0)
-    print_option_id = item._doc.get('print_option_id', 'none')
-    courier = item._doc.get('delivery_cost', 80)
-    subtotal, delivery, total, front_cost, back_cost = calc_total(float(item.base_price), print_option_id, total_qty, courier)
-    item._doc['front_print_cost'] = front_cost
-    item._doc['back_print_cost'] = back_cost
-    item._doc['delivery_cost'] = delivery
-    item._doc['total'] = total
+    has_front = bool(item.front_design)
+    has_back = bool(item.back_design)
+    subtotal, delivery, total = calc_total(float(item.base_price), has_front, has_back, total_qty)
+    item.front_print_cost = FRONT_PRINT if has_front else 0
+    item.back_print_cost = BACK_PRINT if has_back else 0
+    item.delivery_cost = delivery
+    item.total = total
 
-    get_db()['cart_items'].replace_one({'_id': item._doc['_id']}, item._doc)
+    db.session.commit()
     return jsonify(item.to_dict())
 
 
-@cart_bp.route('/<string:item_id>', methods=['DELETE'])
+@cart_bp.route('/<int:item_id>', methods=['DELETE'])
 @jwt_required()
 def remove_from_cart(item_id):
     user_id = get_jwt_identity()
-    item = CartItem.find_by_id(item_id)
-    if not item or item.user_id != user_id:
-        abort(404)
-    item.delete()
+    item = CartItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
+    db.session.delete(item)
+    db.session.commit()
     return jsonify({'message': 'Removed'})
 
 
@@ -157,5 +128,6 @@ def remove_from_cart(item_id):
 @jwt_required()
 def clear_cart():
     user_id = get_jwt_identity()
-    get_db()['cart_items'].delete_many({'user_id': user_id})
+    CartItem.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
     return jsonify({'message': 'Cart cleared'})
