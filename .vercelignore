@@ -1,0 +1,30 @@
+# Python Virtual Environments & Bytecode
+backend/venv/
+backend/.venv/
+venv/
+.venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+backend/instance/
+backend/tests/
+backend/*.log
+backend/*.err
+backend/*.db
+
+# Node dependencies & local builds
+node_modules/
+frontend/node_modules/
+node-backend/
+frontend/dist/
+
+# Git & CI/CD
+.git/
+.github/
+
+# Temporary and local artifacts
+*.pdf
+pdf_cutouts/
+pdf_map/
+pdf_pages/

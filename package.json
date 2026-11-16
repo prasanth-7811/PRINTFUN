@@ -1,0 +1,12 @@
+{
+  "name": "printheaven",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PRINTHEAVEN - Custom Garment Printing Platform",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "deploy": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-vercel.ps1",
+    "deploy:prod": "vercel --prod"
+  }
+}

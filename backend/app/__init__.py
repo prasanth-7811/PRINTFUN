@@ -71,8 +71,10 @@ def create_app(config_name=None):
     def server_error(e):
         return jsonify({'message': 'Internal server error'}), 500
 
+    @app.route('/api')
+    @app.route('/api/')
     @app.route('/api/health')
     def health():
-        return jsonify({'status': 'ok', 'service': 'printheaven-api'})
+        return jsonify({'status': 'ok', 'service': 'printheaven-api', 'brand': 'PRINTHEAVEN'})
 
     return app
