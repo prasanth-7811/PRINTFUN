@@ -142,7 +142,7 @@ class Config:
     # Public frontend origin, used to build verification & reset links.
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
     MAIL_FROM = os.environ.get('MAIL_FROM', 'PRINTHEAVEN <noreply@printheaven.co.in>')
-    SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'hello@printheaven.co.in')
+    SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'printheavenstudio@gmail.com')
     # Enable to return the verification link / OTP in the API response
     # alongside the real delivery — strictly for local development.
     DEV_RETURN_TOKEN = os.environ.get('DEV_RETURN_TOKEN', '').lower() in ('1', 'true')

@@ -138,6 +138,7 @@ export interface CartItem {
   front_print_cost: number
   back_print_cost: number
   delivery_cost: number
+  print_option_id?: string
   total: number
 }
 
@@ -191,6 +192,7 @@ export interface OrderItem {
   base_price: number
   front_print_cost: number
   back_print_cost: number
+  print_option_id?: string
   total: number
 }
 

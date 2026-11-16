@@ -237,7 +237,6 @@ def get_enquiries():
 
 
 @admin_bp.route('/settings', methods=['GET'])
-@admin_required
 def get_settings():
     settings = Setting.query.all()
     result = {}
@@ -490,9 +489,9 @@ def seed_products():
             'description': 'Everyday round neck tees in combed cotton and poly cotton.',
             'images': ['/products/round-neck.png'],
             'variants': [
-                {'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck', 'audience': 'adults', 'price': 170, 'fabric': '100% RL Combed Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
-                {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton', 'audience': 'adults', 'price': 95, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 180, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
-                {'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/round-neck.png']},
+                {'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck', 'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+                {'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton', 'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 180, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/round-neck.png']},
+                {'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids', 'audience': 'kids', 'price': 299, 'fabric': '100% Cotton', 'material': 'Single Jersey', 'gsm': 180, 'colours': colours('Black', 'White', 'Navy'), 'sizes': ['XS', 'S', 'M', 'L'], 'images': ['/products/round-neck.png']},
             ],
         },
         {
@@ -501,9 +500,8 @@ def seed_products():
             'description': 'Premium polos in pique, polyester and acid-wash finishes.',
             'images': ['/products/polo.png'],
             'variants': [
-                {'name': 'Premium Polo T-Shirt', 'slug': 'premium-polo', 'audience': 'adults', 'price': 270, 'fabric': '100% RL Combed Cotton', 'material': 'Pique', 'gsm': 240, 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
-                {'name': 'Polyester Mars Polo T-Shirt', 'slug': 'polyester-mars-polo', 'audience': 'adults', 'price': 180, 'fabric': '100% Polyester Mars', 'material': 'Polyester Mars', 'gsm': 200, 'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
-                {'name': 'Acid Wash Polo T-Shirt', 'slug': 'acid-wash-polo', 'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 220, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+                {'name': "Men's Polo T-Shirt", 'slug': 'premium-polo', 'audience': 'adults', 'price': 499, 'fabric': '100% RL Combed Cotton', 'material': 'Pique', 'gsm': 240, 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
+                {'name': 'Poly Cotton Polo T-Shirt', 'slug': 'polyester-mars-polo', 'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 200, 'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'), 'sizes': ADULT_SIZES, 'images': ['/products/polo.png']},
                 {'name': 'Polo T-Shirt — Kids', 'slug': 'polo-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/polo.png']},
             ],
         },
@@ -513,9 +511,9 @@ def seed_products():
             'description': 'Drop-shoulder oversized fits in French Terry, poly cotton and acid wash.',
             'images': ['/products/oversized.png'],
             'variants': [
-                {'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry', 'audience': 'adults', 'price': 240, 'fabric': '100% RL Combed Cotton', 'material': 'French Terry', 'gsm': 240, 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink', 'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
-                {'name': 'Oversized T-Shirt — Poly Cotton', 'slug': 'oversized-poly-cotton', 'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 240, 'colours': colours('Maroon', 'White', 'Black', 'Navy', 'Half White'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
-                {'name': 'Acid Wash Oversized T-Shirt', 'slug': 'acid-wash-oversized', 'audience': 'adults', 'price': 280, 'fabric': '100% RL Combed Cotton', 'material': '100% RL Combed Cotton', 'gsm': 240, 'colours': colours('Olive Green', 'White', 'Maroon', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
+                {'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry', 'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton', 'material': 'French Terry', 'gsm': 240, 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink', 'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
+                {'name': 'Oversized T-Shirt — Poly Cotton', 'slug': 'oversized-poly-cotton', 'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton', 'material': 'Poly Cotton', 'gsm': 240, 'colours': colours('Maroon', 'White', 'Black', 'Navy', 'Half White'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
+                {'name': 'Acid Wash Oversized T-Shirt', 'slug': 'acid-wash-oversized', 'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton', 'material': '100% RL Combed Cotton', 'gsm': 240, 'colours': colours('Olive Green', 'White', 'Maroon', 'Black'), 'sizes': ADULT_SIZES, 'images': ['/products/oversized.png']},
                 {'name': 'Oversized T-Shirt — Kids', 'slug': 'oversized-kids', 'audience': 'kids', 'price': None, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': [], 'images': ['/products/oversized.png']},
             ],
         },
@@ -525,8 +523,8 @@ def seed_products():
             'description': 'Heavyweight loopknit-raised hoodies. Adults only.',
             'images': ['/products/hoodie.png'],
             'variants': [
-                {'name': 'Regular Hoodie', 'slug': 'regular-hoodie', 'audience': 'adults', 'price': 400, 'fabric': '100% Cotton', 'material': 'Loopknit Raised', 'gsm': 300, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
-                {'name': 'Acid Wash Hoodie', 'slug': 'acid-wash-hoodie', 'audience': 'adults', 'price': 440, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
+                {'name': 'Regular Hoodie', 'slug': 'regular-hoodie', 'audience': 'adults', 'price': 599, 'fabric': '100% Cotton', 'material': 'Loopknit Raised', 'gsm': 300, 'colours': colours('Black'), 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
+                {'name': 'Acid Wash Hoodie', 'slug': 'acid-wash-hoodie', 'audience': 'adults', 'price': 599, 'fabric': None, 'material': None, 'gsm': None, 'colours': [], 'sizes': ADULT_SIZES, 'images': ['/products/hoodie.png']},
             ],
         },
     ]

@@ -25,6 +25,10 @@ export const cartService = {
     back_design?: string
     front_dimensions?: { width: number; height: number }
     back_dimensions?: { width: number; height: number }
+    print_option_id?: string
+    front_print_cost?: number
+    back_print_cost?: number
+    delivery_cost?: number
   }) {
     const res = await api.post('/cart', data)
     return res.data as CartItem

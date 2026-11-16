@@ -1,35 +1,58 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..extensions import db
-from ..models import CartItem, Product, ProductVariant
-from ..utils.auth import get_current_user
+from ..models import CartItem, Product, ProductVariant, Setting
 
 cart_bp = Blueprint('cart', __name__)
 
-FRONT_PRINT = 149
-BACK_PRINT = 149
-DELIVERY_BASE = 79
-FREE_DELIVERY_ABOVE = 999
+# Printing charges (INR) — matches frontend PRINT_OPTIONS in brand.ts
+PRINT_CHARGES = {
+    'none':            {'front': 0,   'back': 0},
+    'logo_only':       {'front': 70,  'back': 0},
+    'front_print':     {'front': 100, 'back': 0},
+    'back_print':      {'front': 0,   'back': 100},
+    'front_logo_back': {'front': 70,  'back': 80},
+    'full_front_back': {'front': 100, 'back': 100},
+}
+
+COURIER_KIDS_ROUND_NECK = 80
 
 
-def calc_total(base_price, has_front, has_back, total_qty):
-    print_cost = (FRONT_PRINT if has_front else 0) + (BACK_PRINT if has_back else 0)
-    subtotal = (base_price + print_cost) * max(total_qty, 1)
-    delivery = 0 if subtotal >= FREE_DELIVERY_ABOVE else DELIVERY_BASE
-    return subtotal, delivery, subtotal + delivery
+def get_courier_charge(product, variant, delivery_cost_override=None):
+    """Return courier charge for this product/variant combination."""
+    if delivery_cost_override is not None:
+        try:
+            return float(delivery_cost_override)
+        except (ValueError, TypeError):
+            pass
+    if product and product.type == 'Round Neck' and variant and getattr(variant, 'audience', None) == 'kids':
+        return float(COURIER_KIDS_ROUND_NECK)
+    # Fetch from admin settings (default 80 if not set)
+    setting = Setting.query.filter_by(key='delivery_base').first()
+    if setting and setting.value:
+        try:
+            return float(setting.value)
+        except (ValueError, TypeError):
+            pass
+    return 80.0
+
+
+def calc_total(base_price, print_option_id, total_qty, courier):
+    charges = PRINT_CHARGES.get(print_option_id or 'none', PRINT_CHARGES['none'])
+    front_cost = charges['front']
+    back_cost = charges['back']
+    qty = max(total_qty, 1)
+    subtotal = (float(base_price) + front_cost + back_cost) * qty
+    total = subtotal + float(courier)
+    return subtotal, courier, total, front_cost, back_cost
 
 
 def resolve_price(data, product):
-    """Return the unit price for the chosen variant, or the product base price.
-
-    Kids variants that haven't been configured (no sizes/price) are never priced
-    and must not be checked out.
-    """
+    """Return the unit price for the chosen variant, or the product base price."""
     variant_id = data.get('variant_id')
     if variant_id:
         variant = ProductVariant.query.get(variant_id)
         if variant and variant.product_id == product.id:
-            # An unconfigured variant carries no price — the guard below rejects it.
             return (float(variant.price) if variant.price is not None else 0.0), variant
     return float(product.base_price), None
 
@@ -51,19 +74,18 @@ def add_to_cart():
     product = Product.query.get_or_404(data['product_id'])
     sizes = data.get('sizes', {})
     total_qty = sum(v for v in sizes.values() if v > 0)
-    has_front = bool(data.get('front_design'))
-    has_back = bool(data.get('back_design'))
+    print_option_id = data.get('print_option_id', 'none')
 
     unit_price, variant = resolve_price(data, product)
 
-    # Unconfigured kids variants cannot be purchased.
     if variant is not None and not variant.configured:
         return jsonify({'message': 'This variant is not available for purchase yet. '
                                    'Please contact us for pricing.'}), 400
     if variant is None and product.coming_soon:
         return jsonify({'message': 'This product is coming soon and cannot be ordered yet.'}), 400
 
-    subtotal, delivery, total = calc_total(unit_price, has_front, has_back, total_qty)
+    courier = get_courier_charge(product, variant, data.get('delivery_cost'))
+    subtotal, delivery, total, front_cost, back_cost = calc_total(unit_price, print_option_id, total_qty, courier)
 
     item = CartItem(
         user_id=user_id,
@@ -76,9 +98,10 @@ def add_to_cart():
         back_design=data.get('back_design'),
         front_dimensions=data.get('front_dimensions'),
         back_dimensions=data.get('back_dimensions'),
+        print_option_id=print_option_id,
         base_price=unit_price,
-        front_print_cost=FRONT_PRINT if has_front else 0,
-        back_print_cost=BACK_PRINT if has_back else 0,
+        front_print_cost=front_cost,
+        back_print_cost=back_cost,
         delivery_cost=delivery,
         total=total,
     )
@@ -100,13 +123,16 @@ def update_cart_item(item_id):
         item.front_design = data['front_design']
     if 'back_design' in data:
         item.back_design = data['back_design']
+    if 'print_option_id' in data:
+        item.print_option_id = data['print_option_id']
 
     total_qty = sum(v for v in item.sizes.values() if v > 0)
-    has_front = bool(item.front_design)
-    has_back = bool(item.back_design)
-    subtotal, delivery, total = calc_total(float(item.base_price), has_front, has_back, total_qty)
-    item.front_print_cost = FRONT_PRINT if has_front else 0
-    item.back_print_cost = BACK_PRINT if has_back else 0
+    courier = float(item.delivery_cost or 0)
+    subtotal, delivery, total, front_cost, back_cost = calc_total(
+        float(item.base_price), item.print_option_id, total_qty, courier
+    )
+    item.front_print_cost = front_cost
+    item.back_print_cost = back_cost
     item.delivery_cost = delivery
     item.total = total
 

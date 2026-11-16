@@ -58,6 +58,11 @@ export default function Footer() {
                   <Link to={`/${item.toLowerCase().replace(' ', '-')}`} className="hover:text-white transition-colors">{item}</Link>
                 </li>
               ))}
+              <li>
+                <a href={`mailto:${BRAND.email}`} className="text-xs text-zinc-400 hover:text-white transition-colors break-all">
+                  {BRAND.email}
+                </a>
+              </li>
             </ul>
           </div>
 

@@ -39,8 +39,6 @@ export default function AdminSettingsPage() {
     // Courier
     courier_kids_round_neck: 80,
     delivery_base: 80,
-    // Delivery
-    delivery_base: 80,
     // Payment
     upi_enabled: true,
     card_enabled: true,

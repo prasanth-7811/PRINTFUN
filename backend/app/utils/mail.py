@@ -171,7 +171,7 @@ def _layout(user_name, body, note=''):
         </td></tr>
         <tr><td style="background:#fafafa;padding:16px 32px;border-top:1px solid #e4e4e7;">
           <p style="margin:0;font-size:12px;color:#71717a;">
-            PRINTHEAVEN · Chennai, Tamil Nadu, India · Support: {os.environ.get('SUPPORT_EMAIL', 'hello@printheaven.co.in')}
+            PRINTHEAVEN · Chennai, Tamil Nadu, India · Support: {os.environ.get('SUPPORT_EMAIL', 'printheavenstudio@gmail.com')}
           </p>
         </td></tr>
       </table>

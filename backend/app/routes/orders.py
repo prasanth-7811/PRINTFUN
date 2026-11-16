@@ -46,10 +46,10 @@ def create_order():
         return jsonify({'message': f'Invalid payment method. Choose from: {', '.join(VALID_PAYMENT_METHODS)}.'}), 400
 
     subtotal = sum(float(i.base_price + i.front_print_cost + i.back_print_cost) *
-                   sum(v for v in i.sizes.values() if v > 0) for i in cart_items)
-    delivery = 0 if subtotal >= 999 else 79
-    discount = 0
-    total = subtotal + delivery - discount
+                   max(sum(v for v in (i.sizes or {}).values() if v > 0), 1) for i in cart_items)
+    delivery = sum(float(i.delivery_cost or 0) for i in cart_items)
+    discount = float(data.get('discount', 0))
+    total = max(0, subtotal + delivery - discount)
 
     order_number = generate_order_number()
     order = Order(
@@ -93,6 +93,7 @@ def create_order():
             base_price=ci.base_price,
             front_print_cost=ci.front_print_cost,
             back_print_cost=ci.back_print_cost,
+            print_option_id=getattr(ci, 'print_option_id', 'none') or 'none',
             total=ci.total,
         )
         db.session.add(item)

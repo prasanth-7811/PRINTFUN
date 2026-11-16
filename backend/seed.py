@@ -7,7 +7,7 @@ unconfigured until an admin sets sizes & pricing.
 from app import create_app
 from app.extensions import db
 from app.models import (User, Product, ProductVariant, Inventory, Design,
-                        Coupon, Review, AuthToken)
+                        Coupon, Review, AuthToken, Setting)
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 from sqlalchemy import inspect, text
@@ -145,7 +145,7 @@ CATALOG = [
         'variants': [
             {
                 'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck',
-                'audience': 'adults', 'price': 170, 'fabric': '100% RL Combed Cotton',
+                'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton',
                 'material': 'Single Jersey', 'gsm': 180,
                 'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'),
                 'sizes': ADULT_SIZES,
@@ -153,17 +153,16 @@ CATALOG = [
             },
             {
                 'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton',
-                'audience': 'adults', 'price': 95, 'fabric': 'Poly Cotton',
+                'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton',
                 'material': 'Poly Cotton', 'gsm': 180,
                 'colours': colours('Black'),
                 'sizes': ADULT_SIZES,
                 'images': ['/products/round-neck.png'],
             },
-            # Kids variant: sizes/price deliberately left unset until admin configures it.
             {
                 'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids',
-                'audience': 'kids', 'price': None, 'fabric': None, 'material': None,
-                'gsm': None, 'colours': [], 'sizes': [],
+                'audience': 'kids', 'price': 299, 'fabric': '100% Cotton', 'material': 'Single Jersey',
+                'gsm': 180, 'colours': colours('Black', 'White', 'Navy'), 'sizes': ['XS', 'S', 'M', 'L'],
                 'images': ['/products/round-neck.png'],
             },
         ],
@@ -176,26 +175,18 @@ CATALOG = [
         'images': ['/products/polo.png'],
         'variants': [
             {
-                'name': 'Premium Polo T-Shirt', 'slug': 'premium-polo',
-                'audience': 'adults', 'price': 270, 'fabric': '100% RL Combed Cotton',
+                'name': "Men's Polo T-Shirt", 'slug': 'premium-polo',
+                'audience': 'adults', 'price': 499, 'fabric': '100% RL Combed Cotton',
                 'material': 'Pique', 'gsm': 240,
                 'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'),
                 'sizes': ADULT_SIZES,
                 'images': ['/products/polo.png'],
             },
             {
-                'name': 'Polyester Mars Polo T-Shirt', 'slug': 'polyester-mars-polo',
-                'audience': 'adults', 'price': 180, 'fabric': '100% Polyester Mars',
-                'material': 'Polyester Mars', 'gsm': 200,
+                'name': 'Poly Cotton Polo T-Shirt', 'slug': 'polyester-mars-polo',
+                'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton',
+                'material': 'Poly Cotton', 'gsm': 200,
                 'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'),
-                'sizes': ADULT_SIZES,
-                'images': ['/products/polo.png'],
-            },
-            {
-                'name': 'Acid Wash Polo T-Shirt', 'slug': 'acid-wash-polo',
-                'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton',
-                'material': 'Poly Cotton', 'gsm': 220,
-                'colours': colours('Black'),
                 'sizes': ADULT_SIZES,
                 'images': ['/products/polo.png'],
             },
@@ -216,7 +207,7 @@ CATALOG = [
         'variants': [
             {
                 'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry',
-                'audience': 'adults', 'price': 240, 'fabric': '100% RL Combed Cotton',
+                'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton',
                 'material': 'French Terry', 'gsm': 240,
                 'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink',
                                    'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'),
@@ -225,7 +216,7 @@ CATALOG = [
             },
             {
                 'name': 'Oversized T-Shirt — Poly Cotton', 'slug': 'oversized-poly-cotton',
-                'audience': 'adults', 'price': 170, 'fabric': 'Poly Cotton',
+                'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton',
                 'material': 'Poly Cotton', 'gsm': 240,
                 'colours': colours('Maroon', 'White', 'Black', 'Navy', 'Half White'),
                 'sizes': ADULT_SIZES,
@@ -233,7 +224,7 @@ CATALOG = [
             },
             {
                 'name': 'Acid Wash Oversized T-Shirt', 'slug': 'acid-wash-oversized',
-                'audience': 'adults', 'price': 280, 'fabric': '100% RL Combed Cotton',
+                'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton',
                 'material': '100% RL Combed Cotton', 'gsm': 240,
                 'colours': colours('Olive Green', 'White', 'Maroon', 'Black'),
                 'sizes': ADULT_SIZES,
@@ -255,17 +246,15 @@ CATALOG = [
         'variants': [
             {
                 'name': 'Regular Hoodie', 'slug': 'regular-hoodie',
-                'audience': 'adults', 'price': 400, 'fabric': '100% Cotton',
+                'audience': 'adults', 'price': 599, 'fabric': '100% Cotton',
                 'material': 'Loopknit Raised', 'gsm': 300,
                 'colours': colours('Black'),
                 'sizes': ADULT_SIZES,
                 'images': ['/products/hoodie.png'],
             },
             {
-                # Acid Wash Hoodie: fabric / GSM / colour intentionally left blank —
-                # the catalog does not provide them. Admin can fill them in later.
                 'name': 'Acid Wash Hoodie', 'slug': 'acid-wash-hoodie',
-                'audience': 'adults', 'price': 440, 'fabric': None,
+                'audience': 'adults', 'price': 599, 'fabric': None,
                 'material': None, 'gsm': None,
                 'colours': [], 'sizes': ADULT_SIZES,
                 'images': ['/products/hoodie.png'],
@@ -409,6 +398,27 @@ with app.app_context():
     for c_data in COUPONS:
         if not Coupon.query.filter_by(code=c_data['code']).first():
             db.session.add(Coupon(**c_data))
+
+    # Settings
+    DEFAULT_SETTINGS = [
+        ('delivery_base', '80', 'int'),
+        ('delivery_kids_round_neck', '80', 'int'),
+        ('print_charge_logo_only', '70', 'int'),
+        ('print_charge_front_print', '100', 'int'),
+        ('print_charge_back_print', '100', 'int'),
+        ('print_charge_front_logo_back', '150', 'int'),
+        ('print_charge_full_front_back', '200', 'int'),
+        ('store_name', 'PRINTHEAVEN', 'string'),
+        ('support_email', 'printheavenstudio@gmail.com', 'string'),
+        ('support_phone', '9600650612', 'string'),
+    ]
+    for key, val, stype in DEFAULT_SETTINGS:
+        setting = Setting.query.filter_by(key=key).first()
+        if not setting:
+            db.session.add(Setting(key=key, value=val, type=stype))
+        else:
+            setting.value = val
+            setting.type = stype
 
     db.session.commit()
     print("Database seeded successfully!")

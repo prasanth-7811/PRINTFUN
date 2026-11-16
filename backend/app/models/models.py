@@ -212,6 +212,7 @@ class CartItem(TimestampMixin, db.Model):
     front_print_cost = db.Column(db.Numeric(10, 2), default=0)
     back_print_cost = db.Column(db.Numeric(10, 2), default=0)
     delivery_cost = db.Column(db.Numeric(10, 2), default=0)
+    print_option_id = db.Column(db.String(50), default='none')
     total = db.Column(db.Numeric(10, 2), nullable=False)
 
     product = db.relationship('Product')
@@ -225,6 +226,7 @@ class CartItem(TimestampMixin, db.Model):
             'front_dimensions': self.front_dimensions, 'back_dimensions': self.back_dimensions,
             'base_price': float(self.base_price), 'front_print_cost': float(self.front_print_cost),
             'back_print_cost': float(self.back_print_cost), 'delivery_cost': float(self.delivery_cost),
+            'print_option_id': self.print_option_id or 'none',
             'total': float(self.total),
         }
 
@@ -312,6 +314,7 @@ class OrderItem(db.Model):
     base_price = db.Column(db.Numeric(10, 2))
     front_print_cost = db.Column(db.Numeric(10, 2), default=0)
     back_print_cost = db.Column(db.Numeric(10, 2), default=0)
+    print_option_id = db.Column(db.String(50), default='none')
     total = db.Column(db.Numeric(10, 2))
 
     product = db.relationship('Product')
@@ -323,7 +326,9 @@ class OrderItem(db.Model):
             'front_design': self.front_design, 'back_design': self.back_design,
             'front_dimensions': self.front_dimensions, 'back_dimensions': self.back_dimensions,
             'base_price': float(self.base_price or 0), 'front_print_cost': float(self.front_print_cost or 0),
-            'back_print_cost': float(self.back_print_cost or 0), 'total': float(self.total or 0),
+            'back_print_cost': float(self.back_print_cost or 0),
+            'print_option_id': self.print_option_id or 'none',
+            'total': float(self.total or 0),
         }
 
 
