@@ -1,14 +1,12 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Trash2, Copy, Undo2, Redo2, Type, ShoppingCart, RotateCcw, Minus, Plus, Lock, Unlock, Box } from 'lucide-react'
+import { Trash2, Copy, Undo2, Redo2, Type, ShoppingCart, RotateCcw, Minus, Plus, Lock, Unlock } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { useQuery } from '@tanstack/react-query'
 import TshirtCanvas from '../components/studio/TshirtCanvas'
 import UploadPanel from '../components/studio/UploadPanel'
 import PricePanel from '../components/studio/PricePanel'
 import QualityIndicator from '../components/studio/QualityIndicator'
-import Studio3DCanvas, { type Studio3DCanvasHandle } from '../components/studio3d/Studio3DCanvas'
-import ThreeDControls from '../components/studio3d/ThreeDControls'
 import type { CanvasDesign, Audience } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
@@ -68,14 +66,6 @@ export default function DesignStudioPage() {
   const [lockAspect, setLockAspect] = useState(true)
   const [printOptionId, setPrintOptionId] = useState<PrintOptionId>('none')
   const [courierCharge, setCourierCharge] = useState<number | null>(null)
-
-  // 3D Visualization Studio state
-  const studio3dRef = useRef<Studio3DCanvasHandle>(null)
-  const [studioMode, setStudioMode] = useState<'2d' | '3d'>(
-    searchParams.get('view3d') === 'true' ? '3d' : '2d'
-  )
-  const [autoRotate, setAutoRotate] = useState(false)
-  const [showPrintBoundary, setShowPrintBoundary] = useState(true)
 
   // --- Resolve the product + variant being customised ---------------------
   const productIdParam = searchParams.get('product')
@@ -341,42 +331,16 @@ export default function DesignStudioPage() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <div className="bg-white border-b border-zinc-100 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-16 z-20">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="bg-white border-b border-zinc-100 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-16 z-20">
+        <div className="flex items-center gap-3">
           <h1 className="font-black text-lg">Design Studio</h1>
           <div className="flex items-center gap-1 bg-zinc-100 rounded-xl px-2 py-1">
             {(['front', 'back'] as const).map(v => (
-              <button key={v} onClick={() => {
-                setView(v)
-                setSelectedId(null)
-                if (studioMode === '3d') {
-                  studio3dRef.current?.setCameraView(v)
-                }
-              }}
+              <button key={v} onClick={() => { setView(v); setSelectedId(null) }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${view === v ? 'bg-black text-white' : 'text-zinc-500 hover:text-zinc-700'}`}>
                 {v}
               </button>
             ))}
-          </div>
-
-          {/* 2D / 3D Mode Toggle */}
-          <div className="flex items-center gap-1 bg-zinc-100 rounded-xl p-1">
-            <button
-              onClick={() => setStudioMode('2d')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                studioMode === '2d' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              2D View
-            </button>
-            <button
-              onClick={() => setStudioMode('3d')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                studioMode === '3d' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Box size={13} /> 3D Studio
-            </button>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -569,69 +533,27 @@ export default function DesignStudioPage() {
             )}
           </div>
 
-          {/* Center Canvas / 3D Studio */}
+          {/* Center Canvas */}
           <div className="flex flex-col items-center gap-4">
-            {studioMode === '3d' ? (
-              <div className="w-full max-w-md flex flex-col gap-3">
-                {/* 3D Canvas Viewport */}
-                <div className="w-full h-[470px] rounded-3xl overflow-hidden border border-zinc-200 shadow-sm relative bg-zinc-100">
-                  <Studio3DCanvas
-                    ref={studio3dRef}
-                    garmentType={product?.type || 'Round Neck'}
-                    color={colour.hex}
-                    frontDesigns={frontDesigns}
-                    backDesigns={backDesigns}
-                    selectedId={selectedId}
-                    showPrintBoundary={showPrintBoundary}
-                    autoRotate={autoRotate}
-                    onWebGLUnavailable={() => setStudioMode('2d')}
-                  />
-                </div>
+            <div className="bg-white rounded-3xl border border-zinc-100 p-6 w-full max-w-sm shadow-sm">
+              <TshirtCanvas
+                designs={designs}
+                selectedId={selectedId}
+                tshirtColour={colour.hex}
+                view={view}
+                onSelect={setSelectedId}
+                onUpdate={updateDesign}
+                onRotate={rotateDesign}
+                onResizeEnd={() =>
+                  pushHistory(
+                    view === 'front' ? frontDesigns : backDesigns,
+                    view === 'back' ? backDesigns : frontDesigns,
+                  )
+                }
+              />
+            </div>
 
-                {/* 3D View & Artwork Controls */}
-                <ThreeDControls
-                  onSetView={(v) => studio3dRef.current?.setCameraView(v)}
-                  autoRotate={autoRotate}
-                  onToggleAutoRotate={() => setAutoRotate(!autoRotate)}
-                  showPrintBoundary={showPrintBoundary}
-                  onTogglePrintBoundary={() => setShowPrintBoundary(!showPrintBoundary)}
-                  selectedDesign={selected || null}
-                  currentSide={view}
-                  onUpdateDesign={(id, updates) => {
-                    updateDesign(id, updates)
-                    pushHistory(
-                      view === 'front' ? frontDesigns : backDesigns,
-                      view === 'back' ? backDesigns : frontDesigns
-                    )
-                  }}
-                  onDeleteDesign={deleteSelected}
-                  onUndo={undo}
-                  onRedo={redo}
-                  canUndo={historyIdx > 0}
-                  canRedo={historyIdx < history.length - 1}
-                />
-              </div>
-            ) : (
-              <div className="bg-white rounded-3xl border border-zinc-100 p-6 w-full max-w-sm shadow-sm">
-                <TshirtCanvas
-                  designs={designs}
-                  selectedId={selectedId}
-                  tshirtColour={colour.hex}
-                  view={view}
-                  onSelect={setSelectedId}
-                  onUpdate={updateDesign}
-                  onRotate={rotateDesign}
-                  onResizeEnd={() =>
-                    pushHistory(
-                      view === 'front' ? frontDesigns : backDesigns,
-                      view === 'back' ? backDesigns : frontDesigns,
-                    )
-                  }
-                />
-              </div>
-            )}
-
-            {/* Colour Selector (Shared for both 2D and 3D) */}
+            {/* Colour Selector */}
 
             <div className="bg-white rounded-2xl border border-zinc-100 p-4 w-full max-w-sm">
               <p className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">
