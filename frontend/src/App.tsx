@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { CartProvider } from './contexts/CartContext'
 import MainLayout from './layouts/MainLayout'
 import AdminLayout from './layouts/AdminLayout'
+import ScrollToTop from './components/layout/ScrollToTop'
 
 import HomePage from './pages/HomePage'
 import ShopPage from './pages/ShopPage'
@@ -57,6 +58,7 @@ export default function App() {
       <AuthProvider>
         <CartProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
