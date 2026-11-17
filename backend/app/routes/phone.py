@@ -26,8 +26,7 @@ INDIAN_MOBILE_RE = re.compile(r'^(\+91|0)?[6-9]\d{9}$')
 
 
 def _user_response(user):
-    return {'id': user.id, 'name': user.name, 'email': user.email,
-            'phone': user.phone, 'phone_verified': user.phone_verified}
+    return user.to_dict()
 
 
 def _issue_token(user):

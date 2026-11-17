@@ -76,9 +76,26 @@ export const authService = {
     }
   },
 
-  async login(email: string, password: string, remember_me = false) {
-    const res = await api.post('/auth/login', { email, password, remember_me })
+  async login(identifier: string, password: string, remember_me = false) {
+    const res = await api.post('/auth/login', { identifier, email: identifier, password, remember_me })
     return res.data as AuthResponse
+  },
+
+  async sendLoginOtp(identifier: string) {
+    const res = await api.post('/auth/send-login-otp', { identifier })
+    return res.data as {
+      message: string
+      channel: 'sms' | 'email'
+      destination_hint?: string
+      cooldown_seconds?: number
+      otp?: string
+      verified_provider?: string
+    }
+  },
+
+  async verifyLoginOtp(identifier: string, otp: string) {
+    const res = await api.post('/auth/verify-login-otp', { identifier, otp })
+    return res.data as AuthResponse & { verified_via_supabase?: boolean }
   },
 
   async adminLogin(email: string, password: string) {

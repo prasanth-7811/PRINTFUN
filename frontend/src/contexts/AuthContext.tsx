@@ -6,7 +6,8 @@ import { cartService } from '../services/cart'
 interface AuthContextType {
   user: User | null
   token: string | null
-  login: (email: string, password: string, remember?: boolean) => Promise<void>
+  login: (identifier: string, password: string, remember?: boolean) => Promise<void>
+  loginWithOtp: (identifier: string, otp: string) => Promise<void>
   adminLogin: (email: string, password: string) => Promise<void>
   register: (data: {
     name: string
@@ -84,12 +85,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const login = async (email: string, password: string, remember = false) => {
+  const login = async (identifier: string, password: string, remember = false) => {
     setLoading(true)
     try {
-      const res = await authService.login(email, password, remember)
+      const res = await authService.login(identifier, password, remember)
       persist(res.token, res.user)
       // Pull the authenticated user's server-side cart without dropping it.
+      await cartService.getCart().catch(() => {})
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loginWithOtp = async (identifier: string, otp: string) => {
+    setLoading(true)
+    try {
+      const res = await authService.verifyLoginOtp(identifier, otp)
+      persist(res.token, res.user)
       await cartService.getCart().catch(() => {})
     } finally {
       setLoading(false)
@@ -132,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         token,
         login,
+        loginWithOtp,
         adminLogin,
         register,
         logout,

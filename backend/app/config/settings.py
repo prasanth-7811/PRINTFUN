@@ -26,7 +26,7 @@ def _database_uri():
     """
     uri = os.environ.get(
         'DATABASE_URL',
-        'postgresql+psycopg2://postgres:password@localhost:5432/printheaven',
+        'postgresql+psycopg2://postgres@localhost:5432/printheaven',
     )
     # A bare `postgresql://` URL selects psycopg2's legacy default driver; pin
     # psycopg2 explicitly so the dialect matches requirements.txt.

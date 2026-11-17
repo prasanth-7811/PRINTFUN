@@ -3,11 +3,14 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import (create_access_token, jwt_required,
                                 get_jwt_identity, get_jwt)
+from sqlalchemy import func
 from ..extensions import db, limiter
 from ..models import User, AuthToken
 from ..utils.auth import get_current_user
 from ..utils.mail import send_verification_email, send_password_reset_email, send_otp_email, MailError
 from ..utils.supabase_otp import issue_supabase_otp, verify_supabase_otp
+from ..utils.otp import normalize_phone
+from ..utils.sms import send_sms, SmsError
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -18,6 +21,23 @@ PASSWORD_MIN = 8
 VERIFICATION_TTL_HOURS = 24
 RESET_TTL_HOURS = 1
 RESEND_COOLDOWN_SECONDS = 30
+
+
+def _find_user_by_identifier(identifier: str):
+    """Find a user by either email address or phone number (with various Indian formats)."""
+    if not identifier:
+        return None
+    raw = identifier.strip()
+    clean_p = normalize_phone(raw)
+    filters = [func.lower(User.email) == raw.lower()]
+    if clean_p:
+        filters.extend([
+            User.phone == raw,
+            User.phone == clean_p,
+            User.phone == f'+91{clean_p}',
+            User.phone == f'+91 {clean_p}',
+        ])
+    return User.query.filter(db.or_(*filters)).first()
 
 
 def _validate_password(password):
@@ -282,32 +302,23 @@ def resend_verification():
 
 
 @auth_bp.route('/login', methods=['POST'])
-@limiter.limit('10 per minute')
+@limiter.limit('20 per minute')
 def login():
     data = request.get_json(silent=True) or {}
-    email = (data.get('email') or '').strip().lower()
+    identifier = (data.get('email') or data.get('identifier') or data.get('phone') or '').strip()
     password = data.get('password') or ''
     remember = bool(data.get('remember_me', False))
 
-    if not email or not password:
-        return jsonify({'message': 'Email and password are required.'}), 400
+    if not identifier or not password:
+        return jsonify({'message': 'Email or mobile number and password are required.'}), 400
 
-    user = User.query.filter_by(email=email).first()
+    user = _find_user_by_identifier(identifier)
     # Same error for "no such user" and "wrong password" to prevent enumeration.
     if user is None or not user.check_password(password):
-        return jsonify({'message': 'Incorrect email or password.'}), 401
+        return jsonify({'message': 'Incorrect email/mobile or password.'}), 401
 
     if not user.is_active:
-        return jsonify({'message': 'Your account has been disabled. '
-                                    'Contact support.'}), 403
-
-    if not user.email_verified:
-        db.session.commit()
-        return jsonify({
-            'message': 'Please verify your email address before logging in.',
-            'verification_required': True,
-            'email': user.email,
-        }), 403
+        return jsonify({'message': 'Your account has been disabled. Contact support.'}), 403
 
     user.last_login = datetime.utcnow()
     db.session.commit()
@@ -319,22 +330,22 @@ def login():
 
 
 @auth_bp.route('/admin-login', methods=['POST'])
-@limiter.limit('10 per minute')
+@limiter.limit('20 per minute')
 def admin_login():
     data = request.get_json(silent=True) or {}
-    email = (data.get('email') or '').strip().lower()
+    identifier = (data.get('email') or data.get('identifier') or data.get('phone') or '').strip()
     password = data.get('password') or ''
 
-    user = User.query.filter_by(email=email).first()
+    if not identifier or not password:
+        return jsonify({'message': 'Email/Phone and password are required.'}), 400
+
+    user = _find_user_by_identifier(identifier)
     if user is None or not user.check_password(password):
         return jsonify({'message': 'Incorrect email or password.'}), 401
     if not user.is_active:
         return jsonify({'message': 'Your account has been disabled.'}), 403
     if user.role not in ('admin', 'manager', 'production', 'shipping'):
-        return jsonify({'message': 'Access denied'}), 403
-    if not user.email_verified:
-        return jsonify({'message': 'Please verify your email address before logging in.',
-                        'verification_required': True, 'email': user.email}), 403
+        return jsonify({'message': 'Access denied: Administrator privileges required.'}), 403
 
     user.last_login = datetime.utcnow()
     db.session.commit()
@@ -343,6 +354,101 @@ def admin_login():
         'token': _issue_token(user),
         'user': user.to_dict(),
     })
+
+
+@auth_bp.route('/send-login-otp', methods=['POST'])
+@limiter.limit('6 per minute')
+def send_login_otp():
+    """Send a 6-digit OTP code to mobile or email for instant passwordless sign-in."""
+    data = request.get_json(silent=True) or {}
+    identifier = (data.get('identifier') or data.get('email') or data.get('phone') or '').strip()
+    if not identifier:
+        return jsonify({'message': 'Please enter your registered email or mobile number.'}), 400
+
+    user = _find_user_by_identifier(identifier)
+    if not user:
+        return jsonify({'message': 'No account found with this email or mobile number. Please register first.',
+                        'not_found': True}), 404
+
+    if not user.is_active:
+        return jsonify({'message': 'Your account has been disabled. Contact support.'}), 403
+
+    is_phone = bool(re.search(r'^\+?[0-9\s\-()]{7,15}$', identifier)) or ('@' not in identifier)
+    channel = 'sms' if (is_phone and user.phone) else 'email'
+
+    raw_otp, _ = issue_supabase_otp(user, purpose='login_otp',
+                                    phone=user.phone if channel == 'sms' else None,
+                                    email=user.email if channel == 'email' else None)
+
+    dev_otp = None
+    if current_app.config.get('DEV_RETURN_TOKEN'):
+        dev_otp = raw_otp
+
+    if channel == 'sms':
+        clean_num = normalize_phone(user.phone)
+        destination = f'+91{clean_num}' if not user.phone.startswith('+') else user.phone
+        try:
+            send_sms(destination, f'{raw_otp} is your PRINTHEAVEN login code. Valid for 10 minutes. Do not share it.')
+        except SmsError:
+            pass
+        msg = f'A 6-digit verification code has been sent to mobile ending in {user.phone[-4:] if len(user.phone) >= 4 else user.phone}.'
+    else:
+        try:
+            send_otp_email(user.email, user.name, raw_otp)
+        except MailError:
+            pass
+        msg = f'A 6-digit verification code has been sent to {user.email}.'
+
+    resp = {
+        'message': msg,
+        'channel': channel,
+        'destination_hint': (user.phone[-4:] if channel == 'sms' else user.email),
+        'cooldown_seconds': 60,
+        'verified_provider': 'supabase',
+    }
+    if dev_otp:
+        resp['otp'] = dev_otp
+
+    return jsonify(resp), 200
+
+
+@auth_bp.route('/verify-login-otp', methods=['POST'])
+@limiter.limit('10 per minute')
+def verify_login_otp():
+    """Verify 6-digit OTP directly against Supabase and log user in immediately."""
+    data = request.get_json(silent=True) or {}
+    identifier = (data.get('identifier') or data.get('email') or data.get('phone') or '').strip()
+    raw_otp = (data.get('otp') or '').strip()
+
+    if not identifier or not raw_otp:
+        return jsonify({'message': 'Mobile/Email and 6-digit OTP code are required.'}), 400
+
+    user = _find_user_by_identifier(identifier)
+    if not user:
+        return jsonify({'message': 'Invalid verification code.'}), 400
+
+    is_phone = bool(re.search(r'^\+?[0-9\s\-()]{7,15}$', identifier)) or ('@' not in identifier)
+    channel = 'sms' if (is_phone and user.phone) else 'email'
+
+    result = verify_supabase_otp(user, raw_otp, purpose='login_otp', channel=channel)
+    if not result['success']:
+        resp = {'message': result['message']}
+        if result.get('mismatch'):
+            resp['mismatch'] = True
+            resp['attempts_remaining'] = result.get('attempts_remaining')
+        if result.get('expired'):
+            resp['expired'] = True
+        return jsonify(resp), result['status_code']
+
+    user.last_login = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'message': 'Signed in successfully via Supabase OTP verification',
+        'verified_via_supabase': True,
+        'user': user.to_dict(),
+        'token': _issue_token(user),
+    }), 200
 
 
 @auth_bp.route('/logout', methods=['POST'])

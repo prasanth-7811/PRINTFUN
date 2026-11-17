@@ -31,7 +31,7 @@ def get_supabase_config():
                 url = f"https://{ref}.supabase.co"
 
     return {
-        'url': url or 'https://xvvmqeirenuscjirbnhl.supabase.co',
+        'url': url or os.environ.get('SUPABASE_URL', ''),
         'key': anon_key,
         'has_api_key': bool(anon_key),
     }
