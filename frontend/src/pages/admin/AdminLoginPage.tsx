@@ -100,7 +100,7 @@ export default function AdminLoginPage() {
               <ArrowLeft size={12} />
               Customer Login
             </Link>
-            <span className="text-zinc-600">Demo: admin@printheaven.co.in</span>
+            <span className="text-zinc-600">Admin: printheavenstudio@gmail.com</span>
           </div>
         </div>
       </div>

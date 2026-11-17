@@ -315,9 +315,9 @@ with app.app_context():
         db.session.commit()
 
     # Admin user
-    if not User.query.filter_by(email='admin@printheaven.co.in').first():
-        admin = User(name='Admin', email='admin@printheaven.co.in',
-                     password_hash=User.hash_password('admin123'), role='admin',
+    if not User.query.filter_by(email='printheavenstudio@gmail.com').first():
+        admin = User(name='PRINTHEAVEN Admin', email='printheavenstudio@gmail.com',
+                     password_hash=User.hash_password('PrintHeaven@2026'), role='admin',
                      email_verified=True)
         db.session.add(admin)
 

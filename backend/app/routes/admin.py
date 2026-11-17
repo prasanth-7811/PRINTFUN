@@ -1,3 +1,5 @@
+import calendar
+from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func
 from ..extensions import db
@@ -21,8 +23,73 @@ def dashboard():
         status_counts[status] = Order.query.filter_by(status=status).count()
 
     customers = User.query.filter_by(role='customer').count()
+    products_count = Product.query.count()
+    designs_count = Design.query.count()
     low_stock = Inventory.query.filter(Inventory.stock > 0, Inventory.stock <= 5).count()
     out_of_stock = Inventory.query.filter_by(stock=0).count()
+
+    # 1. Real Recent Orders
+    recent_orders_query = Order.query.order_by(Order.created_at.desc()).limit(10).all()
+    recent_orders = []
+    for o in recent_orders_query:
+        addr = o.address_snapshot or {}
+        customer_name = addr.get('full_name') or addr.get('name') or (o.user.name if o.user else 'Customer')
+        customer_phone = addr.get('phone') or (o.user.phone if o.user else '')
+        recent_orders.append({
+            'id': o.id,
+            'order_number': o.order_number,
+            'customer': customer_name,
+            'phone': customer_phone,
+            'amount': float(o.total or 0),
+            'status': o.status,
+            'payment_status': o.payment_status,
+            'payment_method': o.payment_method,
+            'item_count': len(o.items) if o.items else 0,
+            'created_at': o.created_at.isoformat() if o.created_at else None,
+        })
+
+    # 2. Real Monthly Sales (last 6 calendar months)
+    monthly_sales = []
+    now = datetime.utcnow()
+    for i in range(5, -1, -1):
+        target_year = now.year
+        target_month = now.month - i
+        while target_month <= 0:
+            target_month += 12
+            target_year -= 1
+        month_abbr = calendar.month_abbr[target_month]
+        start_date = datetime(target_year, target_month, 1)
+        if target_month == 12:
+            end_date = datetime(target_year + 1, 1, 1)
+        else:
+            end_date = datetime(target_year, target_month + 1, 1)
+
+        m_sales = db.session.query(func.sum(Order.total)).filter(
+            Order.created_at >= start_date,
+            Order.created_at < end_date,
+            Order.payment_status == 'paid',
+        ).scalar() or 0
+        monthly_sales.append({
+            'month': month_abbr,
+            'sales': float(m_sales),
+        })
+
+    # 3. Real Weekly Orders (last 7 days)
+    weekly_orders = []
+    today = datetime.utcnow().date()
+    for i in range(6, -1, -1):
+        target_date = today - timedelta(days=i)
+        d_start = datetime.combine(target_date, datetime.min.time())
+        d_end = datetime.combine(target_date, datetime.max.time())
+        d_count = Order.query.filter(
+            Order.created_at >= d_start,
+            Order.created_at <= d_end,
+        ).count()
+        weekly_orders.append({
+            'day': target_date.strftime('%a'),
+            'date': target_date.strftime('%d %b'),
+            'orders': d_count,
+        })
 
     return jsonify({
         'total_sales': float(total_sales),
@@ -36,8 +103,14 @@ def dashboard():
         'cancelled': status_counts.get('cancelled', 0),
         'returned': status_counts.get('returned', 0),
         'customers': customers,
+        'products': products_count,
+        'designs': designs_count,
         'low_stock': low_stock,
         'out_of_stock': out_of_stock,
+        'recent_orders': recent_orders,
+        'monthly_sales': monthly_sales,
+        'weekly_orders': weekly_orders,
+        'is_live': True,
     })
 
 

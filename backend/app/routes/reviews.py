@@ -63,6 +63,19 @@ def create_review():
     return jsonify(review.to_dict()), 201
 
 
+@reviews_bp.route('/admin/all', methods=['GET'])
+@admin_required
+def admin_get_reviews():
+    reviews = Review.query.order_by(Review.created_at.desc()).all()
+    result = []
+    for r in reviews:
+        d = r.to_dict()
+        d['product_name'] = r.product.name if r.product else 'Product'
+        d['customer_name'] = r.user.name if r.user else 'Customer'
+        result.append(d)
+    return jsonify(result)
+
+
 @reviews_bp.route('/<int:review_id>', methods=['PUT'])
 @admin_required
 def moderate_review(review_id):

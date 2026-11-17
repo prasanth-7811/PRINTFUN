@@ -41,4 +41,24 @@ export const orderService = {
     const res = await api.post(`/orders/${id}/resubmit-design`, data)
     return res.data
   },
+
+  async getAdminOrders(params?: { status?: string; page?: number }) {
+    const res = await api.get('/orders/admin/all', { params })
+    return res.data as { items: Order[]; total: number; page: number; pages: number }
+  },
+
+  async getAdminOrder(id: number | string) {
+    const res = await api.get(`/orders/admin/${id}`)
+    return res.data as Order
+  },
+
+  async updateOrderStatus(id: number | string, data: { status: string; note?: string; tracking_id?: string; courier?: string; estimated_delivery?: string }) {
+    const res = await api.put(`/orders/admin/${id}/status`, data)
+    return res.data as Order
+  },
+
+  async deleteAdminOrder(id: number | string) {
+    const res = await api.delete(`/orders/admin/${id}`)
+    return res.data as { message: string }
+  },
 }
