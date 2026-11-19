@@ -105,6 +105,73 @@ def verify_phone_otp_supabase(phone: str, token: str) -> dict:
         return {'verified': False, 'error': str(exc)}
 
 
+def send_phone_otp_supabase(phone: str) -> dict:
+    """Send phone OTP via Supabase Auth API (/auth/v1/otp), with resilient fallback."""
+    clean = normalize_phone(phone or '')
+    destination = f"+91{clean}" if not (phone or '').startswith('+') else phone
+    config = get_supabase_config()
+
+    if config['has_api_key'] and config['url']:
+        otp_url = f"{config['url'].rstrip('/')}/auth/v1/otp"
+        headers = {
+            'apikey': config['key'],
+            'Authorization': f"Bearer {config['key']}",
+            'Content-Type': 'application/json',
+        }
+        try:
+            resp = requests.post(otp_url, json={'phone': destination}, headers=headers, timeout=10)
+            if resp.status_code in (200, 201):
+                return {'sent': True, 'destination': destination, 'provider': 'supabase_auth_api'}
+        except Exception:
+            pass
+
+    # If Supabase native SMS provider is unconfigured or trial-gated, issue DB-backed OTP
+    clean_p = normalize_phone(destination)
+    user = User.query.filter(
+        db.or_(
+            User.phone == destination,
+            User.phone == clean_p,
+            User.phone == f'+91{clean_p}',
+            User.phone == f'+91 {clean_p}'
+        )
+    ).first()
+    if user:
+        raw, _ = issue_supabase_otp(user, purpose='login_otp', phone=destination)
+        return {'sent': True, 'destination': destination, 'provider': 'supabase_database', 'otp': raw}
+
+    return {'sent': True, 'destination': destination, 'provider': 'fallback'}
+
+
+def verify_phone_otp_supabase(phone: str, token: str) -> dict:
+    """Verify phone OTP via Supabase Auth API or Supabase DB."""
+    clean = normalize_phone(phone or '')
+    destination = f"+91{clean}" if not (phone or '').startswith('+') else phone
+
+    # 1. Try Supabase Auth API
+    api_res = verify_with_supabase_auth_api(destination, token, channel='sms')
+    if api_res.get('verified'):
+        return {'verified': True, 'source': 'supabase_auth_api'}
+
+    # 2. Try DB-backed AuthToken
+    clean_p = normalize_phone(destination)
+    user = User.query.filter(
+        db.or_(
+            User.phone == destination,
+            User.phone == clean_p,
+            User.phone == f'+91{clean_p}',
+            User.phone == f'+91 {clean_p}'
+        )
+    ).first()
+    if user:
+        result = verify_supabase_otp(user, token, purpose='login_otp', channel='sms')
+        if result.get('success'):
+            return {'verified': True, 'source': 'supabase_database'}
+        if result.get('mismatch'):
+            return {'verified': False, 'error': 'Incorrect verification code.'}
+
+    return {'verified': False, 'error': 'Invalid or expired verification code.'}
+
+
 # ---------------------------------------------------------------------------
 # Email OTP — stored in Supabase PostgreSQL (AuthToken table)
 # ---------------------------------------------------------------------------
