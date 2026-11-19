@@ -43,7 +43,7 @@ export default function VerifyEmailPage() {
       setState({ kind: 'success' })
       localStorage.setItem('token', res.token)
       localStorage.setItem('user', JSON.stringify(res.user))
-      setTimeout(() => navigate(next ? `/${next.replace(/^\//, '')}` : '/verify-phone'), 2200)
+      setTimeout(() => navigate(next ? `/${next.replace(/^\//, '')}` : '/'), 2200)
     } catch (err: any) {
       const body = err?.response?.data as AuthErrorResponse | undefined
       setState({
@@ -67,7 +67,7 @@ export default function VerifyEmailPage() {
       setState({ kind: 'success' })
       localStorage.setItem('token', res.token)
       localStorage.setItem('user', JSON.stringify(res.user))
-      setTimeout(() => navigate(next ? `/${next.replace(/^\//, '')}` : '/verify-phone'), 2200)
+      setTimeout(() => navigate(next ? `/${next.replace(/^\//, '')}` : '/'), 2200)
     } catch (err: any) {
       setState({
         kind: 'error',
@@ -162,12 +162,10 @@ export default function VerifyEmailPage() {
           </div>
           <p className="text-sm text-zinc-500 leading-relaxed mb-6">
             Your email is now verified in Supabase.<br />
-            {next
-              ? 'Taking you to phone verification next…'
-              : 'You can now log in and start designing.'}
+            You can now log in and start designing.
           </p>
           <button
-            onClick={() => navigate(next ? `/${next.replace(/^\//, '')}` : '/verify-phone')}
+            onClick={() => navigate(next ? `/${next.replace(/^\//, '')}` : '/')}
             className="w-full bg-black text-white py-3 rounded-xl font-semibold text-sm hover:bg-zinc-800 transition-colors"
           >
             CONTINUE

@@ -85,7 +85,7 @@ export const authService = {
     const res = await api.post('/auth/send-login-otp', { identifier })
     return res.data as {
       message: string
-      channel: 'sms' | 'email'
+      channel: 'email'
       destination_hint?: string
       cooldown_seconds?: number
       otp?: string

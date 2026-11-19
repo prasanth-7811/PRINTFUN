@@ -6,7 +6,7 @@ import type { AuthErrorResponse } from '../services/auth'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
-    name: '', email: '', phone: '', password: '', confirm: '',
+    name: '', email: '', password: '', confirm: '',
   })
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -24,8 +24,6 @@ export default function RegisterPage() {
     if (!form.name.trim() || form.name.trim().length < 2) e.name = 'Enter your full name.'
     if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(form.email))
       e.email = 'Enter a valid email address.'
-    if (form.phone.trim() && !/^[0-9+()\-\s]{7,20}$/.test(form.phone))
-      e.phone = 'Enter a valid mobile number.'
     if (form.password.length < 8) e.password = 'Password must be at least 8 characters.'
     else if (form.password !== form.confirm) e.confirm = 'Passwords do not match.'
     if (!acceptTerms) e.terms = 'You must accept the Terms & Conditions.'
@@ -42,7 +40,6 @@ export default function RegisterPage() {
       const res = await register({
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim(),
         password: form.password,
         confirm_password: form.confirm,
         accept_terms: acceptTerms,
@@ -95,16 +92,6 @@ export default function RegisterPage() {
           autoComplete="email"
           error={errors.email}
           required
-        />
-        <FormField
-          id="phone"
-          label="Mobile Number (Optional)"
-          type="tel"
-          value={form.phone}
-          onChange={set('phone')}
-          placeholder="+91 98765 43210"
-          autoComplete="tel"
-          error={errors.phone}
         />
         <div>
           <PasswordField

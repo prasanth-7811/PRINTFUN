@@ -8,8 +8,7 @@ from ..extensions import db, limiter
 from ..models import User, AuthToken
 from ..utils.auth import get_current_user
 from ..utils.mail import send_verification_email, send_password_reset_email, send_otp_email, MailError
-from ..utils.supabase_otp import (issue_supabase_otp, verify_supabase_otp,
-                                   send_phone_otp_supabase, verify_phone_otp_supabase)
+from ..utils.supabase_otp import issue_supabase_otp, verify_supabase_otp
 from ..utils.otp import normalize_phone
 
 auth_bp = Blueprint('auth', __name__)
@@ -359,52 +358,35 @@ def admin_login():
 @auth_bp.route('/send-login-otp', methods=['POST'])
 @limiter.limit('6 per minute')
 def send_login_otp():
-    """Send a 6-digit OTP to mobile (via Supabase SMS) or email for passwordless sign-in."""
+    """Send a 6-digit OTP to email for passwordless sign-in."""
     data = request.get_json(silent=True) or {}
-    identifier = (data.get('identifier') or data.get('email') or data.get('phone') or '').strip()
+    identifier = (data.get('identifier') or data.get('email') or '').strip()
     if not identifier:
-        return jsonify({'message': 'Please enter your registered email or mobile number.'}), 400
+        return jsonify({'message': 'Please enter your registered email address.'}), 400
 
     user = _find_user_by_identifier(identifier)
     if not user:
-        return jsonify({'message': 'No account found with this email or mobile number. Please register first.',
+        return jsonify({'message': 'No account found with this email. Please register first.',
                         'not_found': True}), 404
 
     if not user.is_active:
         return jsonify({'message': 'Your account has been disabled. Contact support.'}), 403
 
-    is_phone = bool(re.search(r'^\+?[0-9\s\-()]{7,15}$', identifier)) or ('@' not in identifier)
-    channel = 'sms' if (is_phone and user.phone) else 'email'
-
-    if channel == 'sms':
-        # Supabase Auth API sends the SMS — no separate SMS provider needed
-        result = send_phone_otp_supabase(user.phone)
-        if not result['sent']:
-            return jsonify({'message': f'Failed to send SMS OTP: {result.get("error", "unknown error")}'}), 503
-        msg = f'A 6-digit code has been sent to mobile ending in {user.phone[-4:] if len(user.phone) >= 4 else user.phone}.'
-        resp = {
-            'message': msg,
-            'channel': 'sms',
-            'destination_hint': user.phone[-4:],
-            'cooldown_seconds': 60,
-            'verified_provider': 'supabase',
-        }
-    else:
-        raw_otp, _ = issue_supabase_otp(user, purpose='login_otp', email=user.email)
-        try:
-            send_otp_email(user.email, user.name, raw_otp)
-        except MailError:
-            pass
-        msg = f'A 6-digit verification code has been sent to {user.email}.'
-        resp = {
-            'message': msg,
-            'channel': 'email',
-            'destination_hint': user.email,
-            'cooldown_seconds': 60,
-            'verified_provider': 'supabase',
-        }
-        if current_app.config.get('DEV_RETURN_TOKEN'):
-            resp['otp'] = raw_otp
+    raw_otp, _ = issue_supabase_otp(user, purpose='login_otp', email=user.email)
+    try:
+        send_otp_email(user.email, user.name, raw_otp)
+    except MailError:
+        pass
+    msg = f'A 6-digit verification code has been sent to {user.email}.'
+    resp = {
+        'message': msg,
+        'channel': 'email',
+        'destination_hint': user.email,
+        'cooldown_seconds': 60,
+        'verified_provider': 'supabase',
+    }
+    if current_app.config.get('DEV_RETURN_TOKEN'):
+        resp['otp'] = raw_otp
 
     return jsonify(resp), 200
 
@@ -412,38 +394,27 @@ def send_login_otp():
 @auth_bp.route('/verify-login-otp', methods=['POST'])
 @limiter.limit('10 per minute')
 def verify_login_otp():
-    """Verify 6-digit OTP via Supabase Auth API (phone) or DB hash (email)."""
+    """Verify 6-digit email OTP against Supabase."""
     data = request.get_json(silent=True) or {}
-    identifier = (data.get('identifier') or data.get('email') or data.get('phone') or '').strip()
+    identifier = (data.get('identifier') or data.get('email') or '').strip()
     raw_otp = (data.get('otp') or '').strip()
 
     if not identifier or not raw_otp:
-        return jsonify({'message': 'Mobile/Email and 6-digit OTP code are required.'}), 400
+        return jsonify({'message': 'Email and 6-digit OTP code are required.'}), 400
 
     user = _find_user_by_identifier(identifier)
     if not user:
         return jsonify({'message': 'Invalid verification code.'}), 400
 
-    is_phone = bool(re.search(r'^\+?[0-9\s\-()]{7,15}$', identifier)) or ('@' not in identifier)
-    channel = 'sms' if (is_phone and user.phone) else 'email'
-
-    if channel == 'sms':
-        # Verify directly with Supabase Auth API
-        result = verify_phone_otp_supabase(user.phone, raw_otp)
-        if not result['verified']:
-            err = result.get('error', 'Incorrect verification code.')
-            return jsonify({'message': err, 'mismatch': True}), 401
-        user.phone_verified = True
-    else:
-        result = verify_supabase_otp(user, raw_otp, purpose='login_otp', channel='email')
-        if not result['success']:
-            resp = {'message': result['message']}
-            if result.get('mismatch'):
-                resp['mismatch'] = True
-                resp['attempts_remaining'] = result.get('attempts_remaining')
-            if result.get('expired'):
-                resp['expired'] = True
-            return jsonify(resp), result['status_code']
+    result = verify_supabase_otp(user, raw_otp, purpose='login_otp', channel='email')
+    if not result['success']:
+        resp = {'message': result['message']}
+        if result.get('mismatch'):
+            resp['mismatch'] = True
+            resp['attempts_remaining'] = result.get('attempts_remaining')
+        if result.get('expired'):
+            resp['expired'] = True
+        return jsonify(resp), result['status_code']
 
     user.last_login = datetime.utcnow()
     user.token_version = (user.token_version or 1) + 1
@@ -452,7 +423,7 @@ def verify_login_otp():
     return jsonify({
         'message': 'Signed in successfully via Supabase OTP',
         'verified_via_supabase': True,
-        'channel': channel,
+        'channel': 'email',
         'user': user.to_dict(),
         'token': _issue_token(user),
     }), 200

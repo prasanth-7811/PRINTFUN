@@ -29,7 +29,7 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       const url = err.config?.url || ''
-      const isAuthEndpoint = url.includes('/auth/') || url.includes('/phone/')
+      const isAuthEndpoint = url.includes('/auth/')
       const pathname = typeof window !== 'undefined' ? window.location.pathname : ''
       const isOnAuthPage = pathname === '/login' || pathname === '/admin/login' || pathname === '/register'
 
