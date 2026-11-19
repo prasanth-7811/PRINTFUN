@@ -40,7 +40,8 @@ export default function ProductPage() {
     if (!product) return
     const first = product.variants.find(v => v.audience === audience && v.is_active) || null
     setVariant(first)
-    setSelectedColour(first?.colours?.[0]?.name || '')
+    const firstColour = first?.colours?.[0]
+    setSelectedColour(firstColour?.name || '')
     setSizeQty({})
     setActiveImage(0)
   }, [product?.id, audience])
@@ -66,6 +67,11 @@ export default function ProductPage() {
   const availableAudiences = product.audiences || ['adults']
   const variantColourObjects = variant?.colours || []
   const variantSizes = variant?.sizes || []
+
+  // Resolve the main display image: use the selected colour's own image if available,
+  // otherwise fall back to the gallery image at activeImage index.
+  const colourObj = variantColourObjects.find(c => c.name === selectedColour)
+  const displayImage = colourObj?.image || images?.[activeImage] || PLACEHOLDER_IMAGE
 
   // A kids variant with no sizes/price is "contact for pricing", not buyable.
   const unconfigured = !variant || !variant.configured
@@ -119,7 +125,7 @@ export default function ProductPage() {
           {/* Images */}
           <div className="space-y-3">
             <div className="aspect-square rounded-2xl overflow-hidden bg-zinc-50">
-              <img src={images?.[activeImage] || PLACEHOLDER_IMAGE} alt={product.name} className="w-full h-full object-cover" />
+              <img src={displayImage} alt={product.name} className="w-full h-full object-cover" />
             </div>
             {images && images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -227,7 +233,15 @@ export default function ProductPage() {
                   <p className="text-sm font-semibold text-zinc-900 mb-3">Colour: <span className="font-normal text-zinc-500">{selectedColour}</span></p>
                   <div className="flex gap-2">
                     {variantColourObjects.map(c => (
-                      <button key={c.name} onClick={() => { setSelectedColour(c.name); setSizeQty({}) }} title={c.name}
+                      <button key={c.name} onClick={() => {
+                        setSelectedColour(c.name)
+                        setSizeQty({})
+                        // Sync gallery to this colour's image if it exists in the images array
+                        if (c.image) {
+                          const idx = images?.indexOf(c.image) ?? -1
+                          if (idx >= 0) setActiveImage(idx)
+                        }
+                      }} title={c.name}
                         className={`w-8 h-8 rounded-full border-2 transition-all ${selectedColour === c.name ? 'border-black scale-110' : 'border-zinc-200 hover:border-zinc-400'}`}
                         style={{ background: c.hex }} />
                     ))}

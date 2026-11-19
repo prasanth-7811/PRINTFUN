@@ -51,6 +51,7 @@ export type Audience = 'kids' | 'adults'
 export interface ProductColour {
   name: string
   hex: string
+  image?: string
 }
 
 export interface ProductVariant {

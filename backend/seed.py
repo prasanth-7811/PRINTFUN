@@ -127,137 +127,343 @@ C = {
 }
 
 
-def colours(*names):
-    return [{'name': n, 'hex': C[n]} for n in names]
+def colour_item(name, img=None):
+    item = {'name': name, 'hex': C.get(name, '#1a1a1a')}
+    if img:
+        item['image'] = img
+    return item
 
 
 ADULT_SIZES = ['S', 'M', 'L', 'XL', '2XL']
 
 # --- Catalog ---------------------------------------------------------------
-# type = category, audiences = who it's for, variants = purchasable SKUs.
 CATALOG = [
     {
-        'name': 'Round Neck T-Shirt', 'slug': 'round-neck-t-shirt',
-        'type': 'Round Neck', 'audiences': ['kids', 'adults'],
-        'description': 'Everyday round neck tees in combed cotton and poly cotton — '
-                       'the blank canvas for custom prints.',
-        'images': ['/products/round-neck.png'],
+        'name': 'Round Neck T-Shirt',
+        'slug': 'round-neck-t-shirt',
+        'type': 'Round Neck',
+        'audiences': ['kids', 'adults'],
+        'description': 'Everyday round neck tees in combed cotton and poly cotton — the blank canvas for custom prints.',
+        'images': [
+            '/products/round-neck.png',
+            '/products/round-neck-kids.png',
+            '/products/round-neck-black.png',
+            '/products/round-neck-white.png',
+            '/products/round-neck-navy.png',
+            '/products/round-neck-royal-blue.png',
+            '/products/round-neck-maroon.png',
+            '/products/round-neck-olive-green.png',
+        ],
         'variants': [
             {
-                'name': 'Regular Fit Round Neck', 'slug': 'regular-fit-round-neck',
-                'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton',
-                'material': 'Single Jersey', 'gsm': 180,
-                'colours': colours('Royal Blue', 'Maroon', 'Navy', 'Olive Green', 'Black', 'White'),
+                'name': "Round Neck — Men's",
+                'slug': 'regular-fit-round-neck',
+                'audience': 'adults',
+                'price': 399,
+                'fabric': '100% RL Combed Cotton',
+                'material': 'Single Jersey',
+                'gsm': 180,
+                'colours': [
+                    colour_item('Black', '/products/round-neck-black.png'),
+                    colour_item('White', '/products/round-neck-white.png'),
+                    colour_item('Navy', '/products/round-neck-navy.png'),
+                    colour_item('Royal Blue', '/products/round-neck-royal-blue.png'),
+                    colour_item('Maroon', '/products/round-neck-maroon.png'),
+                    colour_item('Olive Green', '/products/round-neck-olive-green.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/round-neck.png'],
+                'images': [
+                    '/products/round-neck.png',
+                    '/products/round-neck-black.png',
+                    '/products/round-neck-white.png',
+                    '/products/round-neck-navy.png',
+                    '/products/round-neck-royal-blue.png',
+                    '/products/round-neck-maroon.png',
+                    '/products/round-neck-olive-green.png',
+                ],
             },
             {
-                'name': 'Round Neck T-Shirt', 'slug': 'round-neck-poly-cotton',
-                'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton',
-                'material': 'Poly Cotton', 'gsm': 180,
-                'colours': colours('Black'),
+                'name': 'Round Neck — Poly Cotton',
+                'slug': 'round-neck-poly-cotton',
+                'audience': 'adults',
+                'price': 399,
+                'fabric': 'Poly Cotton',
+                'material': 'Poly Cotton Single Jersey',
+                'gsm': 180,
+                'colours': [
+                    colour_item('Black', '/products/round-neck-black.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/round-neck.png'],
+                'images': ['/products/round-neck-black.png'],
             },
             {
-                'name': 'Round Neck T-Shirt — Kids', 'slug': 'round-neck-kids',
-                'audience': 'kids', 'price': 299, 'fabric': '100% Cotton', 'material': 'Single Jersey',
-                'gsm': 180, 'colours': colours('Black', 'White', 'Navy'), 'sizes': ['XS', 'S', 'M', 'L'],
-                'images': ['/products/round-neck.png'],
+                'name': 'Round Neck — Kids',
+                'slug': 'round-neck-kids',
+                'audience': 'kids',
+                'price': 299,
+                'fabric': '100% Cotton',
+                'material': 'Single Jersey',
+                'gsm': 180,
+                'colours': [
+                    colour_item('Black', '/products/round-neck-kids.png'),
+                    colour_item('White', '/products/round-neck-kids.png'),
+                    colour_item('Navy', '/products/round-neck-kids.png'),
+                ],
+                'sizes': ['XS', 'S', 'M', 'L'],
+                'images': ['/products/round-neck-kids.png'],
             },
         ],
     },
     {
-        'name': 'Polo T-Shirt', 'slug': 'polo-t-shirt',
-        'type': 'Polo', 'audiences': ['kids', 'adults'],
-        'description': 'Premium polos in pique, polyester and acid-wash finishes — '
-                       'smart enough for uniforms, comfy enough for daily wear.',
-        'images': ['/products/polo.png'],
+        'name': 'Polo T-Shirt',
+        'slug': 'polo-t-shirt',
+        'type': 'Polo',
+        'audiences': ['kids', 'adults'],
+        'description': 'Premium polos in pique, polyester and acid-wash finishes — smart enough for uniforms, comfy enough for daily wear.',
+        'images': [
+            '/products/polo.png',
+            '/products/polo-navy.png',
+            '/products/polo-maroon.png',
+            '/products/polo-white.png',
+            '/products/polo-royal-blue.png',
+            '/products/polo-black.png',
+            '/products/polo-poly-cotton.png',
+            '/products/polo-poly-cotton-black.png',
+            '/products/polo-poly-cotton-mustard.png',
+            '/products/polo-poly-cotton-navy.png',
+            '/products/polo-poly-cotton-orange.png',
+            '/products/polo-poly-cotton-white.png',
+        ],
         'variants': [
             {
-                'name': "Men's Polo T-Shirt", 'slug': 'premium-polo',
-                'audience': 'adults', 'price': 499, 'fabric': '100% RL Combed Cotton',
-                'material': 'Pique', 'gsm': 240,
-                'colours': colours('Navy', 'Maroon', 'White', 'Royal Blue', 'Black'),
+                'name': "Men's Polo T-Shirt",
+                'slug': 'premium-polo',
+                'audience': 'adults',
+                'price': 499,
+                'fabric': '100% RL Combed Cotton',
+                'material': 'Pique',
+                'gsm': 240,
+                'colours': [
+                    colour_item('Navy', '/products/polo-navy.png'),
+                    colour_item('Maroon', '/products/polo-maroon.png'),
+                    colour_item('White', '/products/polo-white.png'),
+                    colour_item('Royal Blue', '/products/polo-royal-blue.png'),
+                    colour_item('Black', '/products/polo-black.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/polo.png'],
+                'images': [
+                    '/products/polo.png',
+                    '/products/polo-navy.png',
+                    '/products/polo-maroon.png',
+                    '/products/polo-white.png',
+                    '/products/polo-royal-blue.png',
+                    '/products/polo-black.png',
+                ],
             },
             {
-                'name': 'Poly Cotton Polo T-Shirt', 'slug': 'polyester-mars-polo',
-                'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton',
-                'material': 'Poly Cotton', 'gsm': 200,
-                'colours': colours('Black', 'Mustard', 'Navy', 'Orange', 'White'),
+                'name': 'Poly Cotton Polo T-Shirt',
+                'slug': 'polyester-mars-polo',
+                'audience': 'adults',
+                'price': 399,
+                'fabric': 'Poly Cotton / 100% Polyester Mars',
+                'material': 'Polo Knit',
+                'gsm': 200,
+                'colours': [
+                    colour_item('Black', '/products/polo-poly-cotton-black.png'),
+                    colour_item('Mustard', '/products/polo-poly-cotton-mustard.png'),
+                    colour_item('Navy', '/products/polo-poly-cotton-navy.png'),
+                    colour_item('Orange', '/products/polo-poly-cotton-orange.png'),
+                    colour_item('White', '/products/polo-poly-cotton-white.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/polo.png'],
+                'images': [
+                    '/products/polo-poly-cotton.png',
+                    '/products/polo-poly-cotton-black.png',
+                    '/products/polo-poly-cotton-mustard.png',
+                    '/products/polo-poly-cotton-navy.png',
+                    '/products/polo-poly-cotton-orange.png',
+                    '/products/polo-poly-cotton-white.png',
+                ],
             },
             {
-                'name': 'Polo T-Shirt — Kids', 'slug': 'polo-kids',
-                'audience': 'kids', 'price': None, 'fabric': None, 'material': None,
-                'gsm': None, 'colours': [], 'sizes': [],
+                'name': 'Polo T-Shirt — Kids',
+                'slug': 'polo-kids',
+                'audience': 'kids',
+                'price': None,
+                'fabric': None,
+                'material': None,
+                'gsm': None,
+                'colours': [],
+                'sizes': [],
                 'images': ['/products/polo.png'],
+                'coming_soon': True,
             },
         ],
     },
     {
-        'name': 'Oversized T-Shirt', 'slug': 'oversized-t-shirt',
-        'type': 'Oversized', 'audiences': ['kids', 'adults'],
-        'description': 'Drop-shoulder oversized fits in French Terry, poly cotton and '
-                       'acid wash — built for bold, full-width prints.',
-        'images': ['/products/oversized.png'],
+        'name': 'Oversized T-Shirt',
+        'slug': 'oversized-t-shirt',
+        'type': 'Oversized',
+        'audiences': ['kids', 'adults'],
+        'description': 'Drop-shoulder oversized fits in French Terry, poly cotton and acid wash — built for bold, full-width prints.',
+        'images': [
+            '/products/oversized.png',
+            '/products/oversized-black.png',
+            '/products/oversized-olive-green.png',
+            '/products/oversized-cream.png',
+            '/products/oversized-lavender.png',
+            '/products/oversized-pastel-pink.png',
+            '/products/oversized-maroon.png',
+            '/products/oversized-white.png',
+            '/products/oversized-pastel-mint.png',
+            '/products/oversized-light-brown.png',
+            '/products/oversized-navy.png',
+            '/products/oversized-poly-cotton-black.png',
+            '/products/oversized-poly-cotton-maroon.png',
+            '/products/oversized-poly-cotton-white.png',
+            '/products/oversized-poly-cotton-navy.png',
+            '/products/oversized-poly-cotton-half-white.png',
+            '/products/acid-wash-oversized-black.png',
+            '/products/acid-wash-oversized-olive-green.png',
+            '/products/acid-wash-oversized-white.png',
+            '/products/acid-wash-oversized-maroon.png',
+        ],
         'variants': [
             {
-                'name': 'Oversized T-Shirt — French Terry', 'slug': 'oversized-french-terry',
-                'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton',
-                'material': 'French Terry', 'gsm': 240,
-                'colours': colours('Black', 'Olive Green', 'Cream', 'Lavender', 'Pastel Pink',
-                                   'Maroon', 'White', 'Pastel Mint', 'Light Brown', 'Navy'),
+                'name': 'Oversized T-Shirt — French Terry',
+                'slug': 'oversized-french-terry',
+                'audience': 'adults',
+                'price': 399,
+                'fabric': '100% RL Combed Cotton',
+                'material': 'French Terry',
+                'gsm': 240,
+                'colours': [
+                    colour_item('Black', '/products/oversized-black.png'),
+                    colour_item('Olive Green', '/products/oversized-olive-green.png'),
+                    colour_item('Cream', '/products/oversized-cream.png'),
+                    colour_item('Lavender', '/products/oversized-lavender.png'),
+                    colour_item('Pastel Pink', '/products/oversized-pastel-pink.png'),
+                    colour_item('Maroon', '/products/oversized-maroon.png'),
+                    colour_item('White', '/products/oversized-white.png'),
+                    colour_item('Pastel Mint', '/products/oversized-pastel-mint.png'),
+                    colour_item('Light Brown', '/products/oversized-light-brown.png'),
+                    colour_item('Navy', '/products/oversized-navy.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/oversized.png'],
+                'images': [
+                    '/products/oversized.png',
+                    '/products/oversized-black.png',
+                    '/products/oversized-olive-green.png',
+                    '/products/oversized-cream.png',
+                    '/products/oversized-lavender.png',
+                    '/products/oversized-pastel-pink.png',
+                    '/products/oversized-maroon.png',
+                    '/products/oversized-white.png',
+                    '/products/oversized-pastel-mint.png',
+                    '/products/oversized-light-brown.png',
+                    '/products/oversized-navy.png',
+                ],
             },
             {
-                'name': 'Oversized T-Shirt — Poly Cotton', 'slug': 'oversized-poly-cotton',
-                'audience': 'adults', 'price': 399, 'fabric': 'Poly Cotton',
-                'material': 'Poly Cotton', 'gsm': 240,
-                'colours': colours('Maroon', 'White', 'Black', 'Navy', 'Half White'),
+                'name': 'Oversized T-Shirt — Poly Cotton',
+                'slug': 'oversized-poly-cotton',
+                'audience': 'adults',
+                'price': 399,
+                'fabric': 'Poly Cotton',
+                'material': 'French Terry',
+                'gsm': 240,
+                'colours': [
+                    colour_item('Black', '/products/oversized-poly-cotton-black.png'),
+                    colour_item('Maroon', '/products/oversized-poly-cotton-maroon.png'),
+                    colour_item('White', '/products/oversized-poly-cotton-white.png'),
+                    colour_item('Navy', '/products/oversized-poly-cotton-navy.png'),
+                    colour_item('Half White', '/products/oversized-poly-cotton-half-white.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/oversized.png'],
+                'images': [
+                    '/products/oversized-poly-cotton-black.png',
+                    '/products/oversized-poly-cotton-maroon.png',
+                    '/products/oversized-poly-cotton-white.png',
+                    '/products/oversized-poly-cotton-navy.png',
+                    '/products/oversized-poly-cotton-half-white.png',
+                ],
             },
             {
-                'name': 'Acid Wash Oversized T-Shirt', 'slug': 'acid-wash-oversized',
-                'audience': 'adults', 'price': 399, 'fabric': '100% RL Combed Cotton',
-                'material': '100% RL Combed Cotton', 'gsm': 240,
-                'colours': colours('Olive Green', 'White', 'Maroon', 'Black'),
+                'name': 'Acid Wash Oversized T-Shirt',
+                'slug': 'acid-wash-oversized',
+                'audience': 'adults',
+                'price': 399,
+                'fabric': '100% RL Combed Cotton',
+                'material': 'Acid Wash French Terry',
+                'gsm': 240,
+                'colours': [
+                    colour_item('Black', '/products/acid-wash-oversized-black.png'),
+                    colour_item('Olive Green', '/products/acid-wash-oversized-olive-green.png'),
+                    colour_item('White', '/products/acid-wash-oversized-white.png'),
+                    colour_item('Maroon', '/products/acid-wash-oversized-maroon.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/oversized.png'],
+                'images': [
+                    '/products/acid-wash-oversized-black.png',
+                    '/products/acid-wash-oversized-olive-green.png',
+                    '/products/acid-wash-oversized-white.png',
+                    '/products/acid-wash-oversized-maroon.png',
+                ],
             },
             {
-                'name': 'Oversized T-Shirt — Kids', 'slug': 'oversized-kids',
-                'audience': 'kids', 'price': None, 'fabric': None, 'material': None,
-                'gsm': None, 'colours': [], 'sizes': [],
+                'name': 'Oversized T-Shirt — Kids',
+                'slug': 'oversized-kids',
+                'audience': 'kids',
+                'price': None,
+                'fabric': None,
+                'material': None,
+                'gsm': None,
+                'colours': [],
+                'sizes': [],
                 'images': ['/products/oversized.png'],
+                'coming_soon': True,
             },
         ],
     },
     {
-        'name': 'Hoodies', 'slug': 'hoodies',
-        'type': 'Hoodies', 'audiences': ['adults'],
-        'description': 'Heavyweight loopknit-raised hoodies. Adults only.',
-        'images': ['/products/hoodie.png'],
+        'name': 'Hoodies',
+        'slug': 'hoodies',
+        'type': 'Hoodies',
+        'audiences': ['adults'],
+        'description': 'Heavyweight 300 GSM loopknit raised hoodies for superior warmth and print quality. Adults only.',
+        'images': [
+            '/products/hoodie.png',
+            '/products/hoodie-black.png',
+            '/products/hoodie-acid-wash.png',
+        ],
         'variants': [
             {
-                'name': 'Regular Hoodie', 'slug': 'regular-hoodie',
-                'audience': 'adults', 'price': 599, 'fabric': '100% Cotton',
-                'material': 'Loopknit Raised', 'gsm': 300,
-                'colours': colours('Black'),
+                'name': 'Regular Hoodie',
+                'slug': 'regular-hoodie',
+                'audience': 'adults',
+                'price': 599,
+                'fabric': '100% Cotton',
+                'material': 'Loopknit Raised',
+                'gsm': 300,
+                'colours': [
+                    colour_item('Black', '/products/hoodie-black.png'),
+                ],
                 'sizes': ADULT_SIZES,
-                'images': ['/products/hoodie.png'],
+                'images': ['/products/hoodie.png', '/products/hoodie-black.png'],
             },
             {
-                'name': 'Acid Wash Hoodie', 'slug': 'acid-wash-hoodie',
-                'audience': 'adults', 'price': 599, 'fabric': None,
-                'material': None, 'gsm': None,
-                'colours': [], 'sizes': ADULT_SIZES,
-                'images': ['/products/hoodie.png'],
+                'name': 'Acid Wash Hoodie',
+                'slug': 'acid-wash-hoodie',
+                'audience': 'adults',
+                'price': 599,
+                'fabric': '100% Cotton Acid Wash',
+                'material': 'Loopknit Raised',
+                'gsm': 300,
+                'colours': [
+                    colour_item('Black', '/products/hoodie-acid-wash.png'),
+                ],
+                'sizes': ADULT_SIZES,
+                'images': ['/products/hoodie-acid-wash.png'],
             },
         ],
     },
@@ -289,30 +495,28 @@ def _union_colours(variants):
     seen = {}
     for v in variants:
         for c in (v.get('colours') or []):
-            seen.setdefault(c['name'], c['hex'])
-    return [{'name': k, 'hex': v} for k, v in seen.items()]
+            if c['name'] not in seen:
+                seen[c['name']] = {'name': c['name'], 'hex': c['hex'], 'image': c.get('image')}
+            elif not seen[c['name']].get('image') and c.get('image'):
+                seen[c['name']]['image'] = c.get('image')
+    return list(seen.values())
 
 
 with app.app_context():
     db.create_all()
     migrate_schema()
 
-    # Drop the old mock products so the catalog reflects the new sheet exactly.
+    # Drop/deactivate the old mock products so the catalog reflects the new sheet exactly.
     legacy_slugs = {
+        'classic-crew-neck-tee', 'premium-oversized-tee', 'kids-crew-neck-tee',
+        'polo-collar-tee', 'hoodie-sweatshirt', 'sublimation-tee',
         'classic-oversized-tee', 'premium-round-neck', 'streetwear-drop-shoulder',
         'v-neck-essential', 'polo-classic', 'full-sleeve-comfort',
         'minimal-half-sleeve', 'urban-oversized-fit',
     }
-    legacy_ids = [p.id for p in Product.query.filter(Product.slug.in_(legacy_slugs)).all()]
-    if legacy_ids:
-        Inventory.query.filter(Inventory.product_id.in_(legacy_ids)).delete(
-            synchronize_session=False)
-        Review.query.filter(Review.product_id.in_(legacy_ids)).delete(synchronize_session=False)
-        Coupon.query.filter(Coupon.product_id.in_(legacy_ids)).update(
-            {Coupon.product_id: None}, synchronize_session=False)
-        db.session.commit()
-        Product.query.filter(Product.id.in_(legacy_ids)).delete(synchronize_session=False)
-        db.session.commit()
+    for leg in Product.query.filter(Product.slug.in_(legacy_slugs)).all():
+        leg.is_active = False
+    db.session.commit()
 
     # Admin user
     if not User.query.filter_by(email='printheavenstudio@gmail.com').first():
@@ -337,10 +541,10 @@ with app.app_context():
                 name=entry['name'], slug=entry['slug'], type=entry['type'],
                 description=entry['description'], images=entry['images'],
                 audiences=entry['audiences'], fit='Regular Fit',
-                base_price=min(v['price'] for v in priced),
+                base_price=min(v['price'] for v in priced) if priced else 399,
                 gsm=max([v['gsm'] for v in entry['variants'] if v.get('gsm')],
-                        default=None),
-                fabric=next((v['fabric'] for v in entry['variants'] if v.get('fabric')), None),
+                        default=180),
+                fabric=next((v['fabric'] for v in entry['variants'] if v.get('fabric')), '100% Cotton'),
                 colours=_union_colours(entry['variants']),
                 sizes=ADULT_SIZES,
                 is_active=True, is_new=True, is_featured=True,
@@ -349,11 +553,15 @@ with app.app_context():
             db.session.flush()
         else:
             # Keep an existing product's identity, refresh catalog-driven fields.
+            product.name = entry['name']
+            product.type = entry['type']
+            product.description = entry['description']
+            product.images = entry['images']
             product.audiences = entry['audiences']
-            product.base_price = min(v['price'] for v in priced)
+            product.base_price = min(v['price'] for v in priced) if priced else 399
             product.gsm = max([v['gsm'] for v in entry['variants'] if v.get('gsm')],
-                              default=None)
-            product.fabric = next((v['fabric'] for v in entry['variants'] if v.get('fabric')), None)
+                              default=product.gsm or 180)
+            product.fabric = next((v['fabric'] for v in entry['variants'] if v.get('fabric')), product.fabric)
             product.colours = _union_colours(entry['variants'])
             product.sizes = ADULT_SIZES
             product.is_active = True
@@ -403,6 +611,11 @@ with app.app_context():
     DEFAULT_SETTINGS = [
         ('delivery_base', '80', 'int'),
         ('delivery_kids_round_neck', '80', 'int'),
+        ('price_round_neck_kids', '299', 'int'),
+        ('price_round_neck_mens', '399', 'int'),
+        ('price_polo_mens', '499', 'int'),
+        ('price_polo_poly_cotton', '399', 'int'),
+        ('price_hoodie', '599', 'int'),
         ('print_charge_logo_only', '70', 'int'),
         ('print_charge_front_print', '100', 'int'),
         ('print_charge_back_print', '100', 'int'),
