@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Heart, ShieldCheck, Truck, RotateCcw, Star } from 'lucide-react'
+import { Heart, ShieldCheck, Truck, Sparkles, Star } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { StarRating } from '../components/ui/index'
 import { CURRENCY, BRAND, PLACEHOLDER_IMAGE } from '../config/brand'
@@ -278,7 +278,7 @@ export default function ProductPage() {
             <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
               <div className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-green-500" /> Secure Checkout</div>
               <div className="flex items-center gap-1.5"><Truck size={14} className="text-blue-500" /> Reliable Courier Delivery</div>
-              <div className="flex items-center gap-1.5"><RotateCcw size={14} className="text-purple-500" /> 7-day return policy</div>
+              <div className="flex items-center gap-1.5"><Sparkles size={14} className="text-amber-500" /> Premium Quality Assured</div>
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@ import { Outlet, Link, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
   LayoutDashboard, ShoppingBag, Package, Users, Image, Tag, Settings,
-  BarChart2, Truck, Star, RefreshCw, Menu, X, LogOut, ChevronRight
+  BarChart2, Truck, Star, Menu, X, LogOut, ChevronRight
 } from 'lucide-react'
 import { useState } from 'react'
 import { BRAND } from '../config/brand'
@@ -17,7 +17,6 @@ const navItems = [
   { label: 'Coupons', to: '/admin/coupons', icon: Tag },
   { label: 'Shipping', to: '/admin/shipping', icon: Truck },
   { label: 'Reviews', to: '/admin/reviews', icon: Star },
-  { label: 'Returns', to: '/admin/returns', icon: RefreshCw },
   { label: 'Settings', to: '/admin/settings', icon: Settings },
 ]
 

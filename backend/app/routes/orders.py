@@ -14,8 +14,7 @@ orders_bp = Blueprint('orders', __name__)
 VALID_PAYMENT_METHODS = ('upi', 'card', 'netbanking', 'cod', 'wallet')
 VALID_STATUSES = ('placed', 'confirmed', 'design_review', 'design_approved',
                   'printing', 'quality_check', 'packed', 'shipped',
-                  'out_for_delivery', 'delivered', 'cancelled', 'returned',
-                  'return_requested', 'refund_requested')
+                  'out_for_delivery', 'delivered', 'cancelled')
 
 
 def generate_order_number():
@@ -173,29 +172,13 @@ def cancel_order(order_id):
 @orders_bp.route('/<int:order_id>/return', methods=['POST'])
 @jwt_required()
 def request_return(order_id):
-    user_id = get_jwt_identity()
-    order = Order.query.filter_by(id=order_id, user_id=user_id).first_or_404()
-    if order.status != 'delivered':
-        return jsonify({'message': 'Only delivered orders can be returned'}), 400
-    data = request.get_json()
-    order.status = 'return_requested'
-    db.session.add(OrderStatusHistory(order_id=order.id, status='return_requested',
-                                       note=data.get('reason'), created_by=user_id))
-    db.session.commit()
-    return jsonify(order.to_dict())
+    return jsonify({'message': 'Custom-printed merchandise is manufactured to order and is non-returnable.'}), 400
 
 
 @orders_bp.route('/<int:order_id>/refund', methods=['POST'])
 @jwt_required()
 def request_refund(order_id):
-    user_id = get_jwt_identity()
-    order = Order.query.filter_by(id=order_id, user_id=user_id).first_or_404()
-    data = request.get_json()
-    order.status = 'refund_requested'
-    db.session.add(OrderStatusHistory(order_id=order.id, status='refund_requested',
-                                       note=data.get('reason'), created_by=user_id))
-    db.session.commit()
-    return jsonify(order.to_dict())
+    return jsonify({'message': 'Custom-printed merchandise is manufactured to order and is non-refundable.'}), 400
 
 
 # Admin routes
@@ -225,8 +208,8 @@ def admin_get_order(order_id):
 @admin_required
 def admin_delete_order(order_id):
     order = Order.query.get_or_404(order_id)
-    if order.status not in ('cancelled', 'returned'):
-        return jsonify({'message': 'Only cancelled or returned orders can be deleted.'}), 400
+    if order.status != 'cancelled':
+        return jsonify({'message': 'Only cancelled orders can be deleted.'}), 400
     db.session.delete(order)
     db.session.commit()
     return jsonify({'message': 'Order deleted.'})

@@ -18,10 +18,6 @@ const STATUS_COLORS: Record<string, string> = {
   out_for_delivery: 'bg-sky-100 text-sky-700',
   delivered: 'bg-green-100 text-green-700',
   cancelled: 'bg-zinc-100 text-zinc-500',
-  returned: 'bg-red-100 text-red-600',
-  return_requested: 'bg-amber-100 text-amber-700',
-  refund_requested: 'bg-rose-100 text-rose-700',
-  refunded: 'bg-zinc-100 text-zinc-600',
 }
 
 const ALL_STATUSES = [
@@ -38,7 +34,6 @@ const ALL_STATUSES = [
   'out_for_delivery',
   'delivered',
   'cancelled',
-  'returned',
 ]
 
 export default function AdminOrdersPage() {

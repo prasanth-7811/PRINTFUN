@@ -1,88 +1,121 @@
-"""Supabase OTP Verification Service.
+"""Supabase OTP — phone OTP via Supabase Auth API, email OTP via DB hash.
 
-Handles:
-1. Supabase PostgreSQL database-backed OTP lifecycle (generation, hashing, attempt throttling, verification, and user state sync in Supabase).
-2. Optional Supabase Auth native API OTP verification (via https://<project>.supabase.co/auth/v1/verify) when SUPABASE_KEY / SUPABASE_ANON_KEY is provided.
+Phone flow  : POST /auth/v1/otp  → Supabase sends SMS via its Twilio integration
+              POST /auth/v1/verify (type=sms)
+Email flow  : 6-digit code stored as bcrypt hash in AuthToken (Supabase PostgreSQL)
+
+Key priority: SUPABASE_SERVICE_ROLE_KEY (sb_secret_...) > SUPABASE_ANON_KEY (sb_publishable_...)
+Server-side calls MUST use the secret key.
 """
 import os
 import re
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
+
 import requests
-from flask import current_app
-from sqlalchemy import func
 from ..extensions import db
 from ..models import User, AuthToken
 from .otp import generate_otp, hash_otp, verify_tp_otp, normalize_phone, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS
 
 
-def get_supabase_config():
-    """Extract Supabase project URL and key from environment variables or DATABASE_URL."""
-    url = os.environ.get('SUPABASE_URL')
-    anon_key = os.environ.get('SUPABASE_ANON_KEY') or os.environ.get('SUPABASE_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
-
+def _supabase_url():
+    url = os.environ.get('SUPABASE_URL', '')
     if not url:
-        # Inferred from DATABASE_URL if pointing to Supabase pooler/direct
         db_url = os.environ.get('DATABASE_URL', '')
-        if 'supabase.com' in db_url:
-            match = re.search(r'postgres\.([a-zA-Z0-9]+):', db_url)
-            if match:
-                ref = match.group(1)
-                url = f"https://{ref}.supabase.co"
+        m = re.search(r'postgres\.([a-zA-Z0-9]+):', db_url)
+        if m:
+            url = f"https://{m.group(1)}.supabase.co"
+    return url.rstrip('/')
 
+
+def _supabase_key():
+    """Secret key for server-side; falls back to publishable/anon key."""
+    return (os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+            or os.environ.get('SUPABASE_ANON_KEY')
+            or os.environ.get('SUPABASE_KEY', ''))
+
+
+def _headers():
+    key = _supabase_key()
     return {
-        'url': url or os.environ.get('SUPABASE_URL', ''),
-        'key': anon_key,
-        'has_api_key': bool(anon_key),
-    }
-
-
-def verify_with_supabase_auth_api(target: str, token: str, channel: str = 'sms') -> dict:
-    """Attempt verification with Supabase's native Auth API (/auth/v1/verify).
-
-    channel: 'sms' (for phone) or 'email' (for email)
-    """
-    config = get_supabase_config()
-    if not config['has_api_key']:
-        return {'attempted': False, 'verified': False, 'reason': 'No Supabase API key configured'}
-
-    verify_url = f"{config['url'].rstrip('/')}/auth/v1/verify"
-    headers = {
-        'apikey': config['key'],
-        'Authorization': f"Bearer {config['key']}",
+        'apikey': key,
+        'Authorization': f'Bearer {key}',
         'Content-Type': 'application/json',
     }
 
-    payload = {
-        'type': channel,
-        'token': token,
-    }
-    if channel == 'sms':
-        payload['phone'] = target
-    else:
-        payload['email'] = target
+
+def _has_supabase():
+    return bool(_supabase_url() and _supabase_key())
+
+
+# ---------------------------------------------------------------------------
+# Phone OTP via Supabase Auth API
+# ---------------------------------------------------------------------------
+
+def send_phone_otp_supabase(phone: str) -> dict:
+    """Ask Supabase to send an SMS OTP.
+    Supabase delivers via its own Twilio integration — no SMS provider needed.
+    Returns {'sent': True} or {'sent': False, 'error': '...'}
+    """
+    if not _has_supabase():
+        return {'sent': False, 'error': 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured'}
+
+    clean = normalize_phone(phone or '')
+    e164 = f'+91{clean}' if not (phone or '').strip().startswith('+') else phone.strip()
 
     try:
-        resp = requests.post(verify_url, json=payload, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            return {'attempted': True, 'verified': True, 'data': data}
-        else:
-            return {'attempted': True, 'verified': False, 'status': resp.status_code, 'error': resp.text}
+        resp = requests.post(
+            f'{_supabase_url()}/auth/v1/otp',
+            json={'phone': e164, 'channel': 'sms'},
+            headers=_headers(),
+            timeout=10,
+        )
+        if resp.status_code in (200, 201, 204):
+            return {'sent': True, 'phone': e164}
+        return {'sent': False, 'error': resp.text, 'status': resp.status_code}
     except Exception as exc:
-        return {'attempted': True, 'verified': False, 'error': str(exc)}
+        return {'sent': False, 'error': str(exc)}
 
 
-def issue_supabase_otp(user: User, purpose: str, phone: str = None, email: str = None) -> tuple[str, AuthToken]:
-    """Create and persist a secure 6-digit OTP in Supabase PostgreSQL.
+def verify_phone_otp_supabase(phone: str, token: str) -> dict:
+    """Verify SMS OTP with Supabase Auth API.
+    Returns {'verified': True} or {'verified': False, 'error': '...'}
+    """
+    if not _has_supabase():
+        return {'verified': False, 'error': 'Supabase not configured'}
 
-    Retires older active tokens for the same purpose, stores a salted bcrypt hash,
-    and returns (raw_code, token_record).
+    clean = normalize_phone(phone or '')
+    e164 = f'+91{clean}' if not (phone or '').strip().startswith('+') else phone.strip()
+
+    try:
+        resp = requests.post(
+            f'{_supabase_url()}/auth/v1/verify',
+            json={'phone': e164, 'token': token, 'type': 'sms'},
+            headers=_headers(),
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return {'verified': True, 'session': resp.json()}
+        data = resp.json() if resp.content else {}
+        return {
+            'verified': False,
+            'error': data.get('error_description') or data.get('msg') or resp.text,
+            'status': resp.status_code,
+        }
+    except Exception as exc:
+        return {'verified': False, 'error': str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Email OTP — stored in Supabase PostgreSQL (AuthToken table)
+# ---------------------------------------------------------------------------
+
+def issue_supabase_otp(user: User, purpose: str, phone: str = None, email: str = None):
+    """Create and persist a 6-digit OTP in Supabase PostgreSQL.
+    Returns (raw_code, token_record).
     """
     raw, hashed = generate_otp()
     now = datetime.utcnow()
 
-    # Retire previous unconsumed tokens for this user & purpose
     AuthToken.query.filter(
         AuthToken.user_id == user.id,
         AuthToken.purpose == purpose,
@@ -101,20 +134,14 @@ def issue_supabase_otp(user: User, purpose: str, phone: str = None, email: str =
     )
     db.session.add(token)
     db.session.commit()
-
     return raw, token
 
 
 def verify_supabase_otp(user: User, raw_code: str, purpose: str, channel: str = 'sms') -> dict:
-    """Verify OTP against Supabase database (and Supabase Auth API if configured).
-
-    On successful verification, updates the user's status in Supabase (phone_verified or email_verified),
-    bumps the session token_version, and marks the token used.
-    """
+    """Verify OTP stored in Supabase PostgreSQL (used for email OTP path)."""
     if not raw_code:
         return {'success': False, 'status_code': 400, 'message': 'Verification code is required.'}
 
-    # 1. First, check active token in Supabase PostgreSQL
     token = AuthToken.query.filter(
         AuthToken.user_id == user.id,
         AuthToken.purpose == purpose,
@@ -125,48 +152,40 @@ def verify_supabase_otp(user: User, raw_code: str, purpose: str, channel: str = 
         return {'success': False, 'status_code': 400, 'message': 'Invalid or expired verification code.'}
 
     if token.is_expired:
-        return {'success': False, 'status_code': 410, 'message': 'This verification code has expired. Request a new one.', 'expired': True}
+        return {'success': False, 'status_code': 410,
+                'message': 'This verification code has expired. Request a new one.', 'expired': True}
 
-    # Track attempts
     token.phone_otp_attempts = (token.phone_otp_attempts or 0) + 1
     db.session.commit()
 
     if token.phone_otp_attempts > OTP_MAX_ATTEMPTS:
         token.used_at = datetime.utcnow()
         db.session.commit()
-        return {'success': False, 'status_code': 429, 'message': 'Too many incorrect attempts. Please request a new code.'}
+        return {'success': False, 'status_code': 429,
+                'message': 'Too many incorrect attempts. Please request a new code.'}
 
-    # Verify matching code in Supabase DB hash
-    is_valid_db = verify_tp_otp(raw_code, token.phone_otp_hash or '')
+    is_valid = bool(token.phone_otp_hash and verify_tp_otp(raw_code, token.phone_otp_hash))
+    if not is_valid and token.token_hash:
+        try:
+            is_valid = token.verify(raw_code)
+        except Exception:
+            pass
 
-    # Optional check with Supabase Auth API if db check failed and API key is present
-    is_valid_api = False
-    if not is_valid_db:
-        target = user.phone if channel == 'sms' else user.email
-        api_result = verify_with_supabase_auth_api(target, raw_code, channel)
-        is_valid_api = api_result.get('verified', False)
+    if not is_valid:
+        attempts_left = max(0, OTP_MAX_ATTEMPTS - token.phone_otp_attempts)
+        return {'success': False, 'status_code': 401, 'mismatch': True,
+                'message': 'Incorrect verification code.', 'attempts_remaining': attempts_left}
 
-    if not is_valid_db and not is_valid_api:
-        attempts_left = max(0, OTP_MAX_ATTEMPTS - (token.phone_otp_attempts or 0))
-        return {
-            'success': False,
-            'status_code': 401,
-            'mismatch': True,
-            'message': 'Incorrect verification code.',
-            'attempts_remaining': attempts_left,
-        }
-
-    # 2. Mark token consumed in Supabase
     now = datetime.utcnow()
     token.used_at = now
 
-    # 3. Update verification state in Supabase users table
     if channel == 'sms':
         user.phone_verified = True
+        if token.phone and not user.phone:
+            user.phone = token.phone
     else:
         user.email_verified = True
 
-    # Rotate token version to ensure clean verified session
     user.token_version = (user.token_version or 1) + 1
     db.session.commit()
 
@@ -174,7 +193,6 @@ def verify_supabase_otp(user: User, raw_code: str, purpose: str, channel: str = 
         'success': True,
         'status_code': 200,
         'message': f"{'PHONE' if channel == 'sms' else 'EMAIL'} VERIFIED SUCCESSFULLY VIA SUPABASE",
-        'verification_source': 'supabase_database' if is_valid_db else 'supabase_auth_api',
+        'verification_source': 'supabase_database',
         'verified_at': now.isoformat(),
-        'user': user,
     }

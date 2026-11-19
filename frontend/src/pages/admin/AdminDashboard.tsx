@@ -49,7 +49,6 @@ interface DashboardData {
   shipped: number
   delivered: number
   cancelled: number
-  returned: number
   customers: number
   products: number
   designs: number
@@ -71,7 +70,6 @@ const INITIAL_DATA: DashboardData = {
   shipped: 0,
   delivered: 0,
   cancelled: 0,
-  returned: 0,
   customers: 0,
   products: 0,
   designs: 0,
@@ -96,7 +94,6 @@ const STATUS_COLORS: Record<string, string> = {
   out_for_delivery: 'bg-sky-100 text-sky-700',
   delivered: 'bg-green-100 text-green-700',
   cancelled: 'bg-zinc-100 text-zinc-500',
-  returned: 'bg-red-100 text-red-600',
 }
 
 export default function AdminDashboard() {
@@ -179,11 +176,11 @@ export default function AdminDashboard() {
       hint: 'Completed orders',
     },
     {
-      label: 'Cancelled / Returned',
-      value: data.cancelled + data.returned,
+      label: 'Cancelled Orders',
+      value: data.cancelled,
       icon: AlertTriangle,
       color: 'bg-red-50 text-red-500 border-red-100',
-      hint: `${data.cancelled} cancelled, ${data.returned} returned`,
+      hint: `${data.cancelled} total cancelled`,
     },
   ]
 

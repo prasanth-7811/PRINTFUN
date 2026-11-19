@@ -19,7 +19,7 @@ def dashboard():
     status_counts = {}
     for status in ['placed', 'confirmed', 'design_review', 'design_approved',
                    'printing', 'quality_check', 'packed', 'shipped',
-                   'out_for_delivery', 'delivered', 'cancelled', 'returned']:
+                   'out_for_delivery', 'delivered', 'cancelled']:
         status_counts[status] = Order.query.filter_by(status=status).count()
 
     customers = User.query.filter_by(role='customer').count()
@@ -101,7 +101,6 @@ def dashboard():
         'shipped': status_counts.get('shipped', 0),
         'delivered': status_counts.get('delivered', 0),
         'cancelled': status_counts.get('cancelled', 0),
-        'returned': status_counts.get('returned', 0),
         'customers': customers,
         'products': products_count,
         'designs': designs_count,

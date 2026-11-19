@@ -4,6 +4,8 @@ import type { User } from '../types'
 export interface OtpResponse {
   message: string
   delivery?: string
+  phone?: string
+  verified_provider?: string
   /** Present only when DEV_RETURN_TOKEN is on; the code itself. */
   otp?: string
   cooldown_seconds?: number

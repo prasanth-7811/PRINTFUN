@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Package, ChevronRight, RotateCcw, X } from 'lucide-react'
+import { Package, ChevronRight, X } from 'lucide-react'
 import { orderService } from '../services/orders'
 import type { Order } from '../types'
 import { CURRENCY, PLACEHOLDER_IMAGE } from '../config/brand'
@@ -10,8 +10,7 @@ const STATUS_LABELS: Record<string, string> = {
   design_approved: 'Design Approved', design_rejected: 'Design Rejected',
   printing: 'Printing', quality_check: 'Quality Check', packed: 'Packed',
   shipped: 'Shipped', out_for_delivery: 'Out for Delivery', delivered: 'Delivered',
-  cancelled: 'Cancelled', return_requested: 'Return Requested', returned: 'Returned',
-  refund_requested: 'Refund Requested', refunded: 'Refunded',
+  cancelled: 'Cancelled',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,8 +20,6 @@ const STATUS_COLORS: Record<string, string> = {
   quality_check: 'bg-orange-100 text-orange-700', packed: 'bg-teal-100 text-teal-700',
   shipped: 'bg-cyan-100 text-cyan-700', out_for_delivery: 'bg-blue-100 text-blue-700',
   delivered: 'bg-green-100 text-green-700', cancelled: 'bg-zinc-100 text-zinc-600',
-  return_requested: 'bg-amber-100 text-amber-700', returned: 'bg-zinc-100 text-zinc-600',
-  refund_requested: 'bg-amber-100 text-amber-700', refunded: 'bg-green-100 text-green-700',
 }
 
 // Mock orders for dev
@@ -96,11 +93,6 @@ export default function OrdersPage() {
                   {['placed', 'confirmed', 'design_review'].includes(order.status) && (
                     <button className="flex items-center gap-1 text-xs text-red-500 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50">
                       <X size={12} /> Cancel
-                    </button>
-                  )}
-                  {order.status === 'delivered' && (
-                    <button className="flex items-center gap-1 text-xs text-zinc-600 border border-zinc-200 px-3 py-1.5 rounded-lg hover:bg-zinc-50">
-                      <RotateCcw size={12} /> Return
                     </button>
                   )}
                   <Link to={`/orders/${order.id}`} className="flex items-center gap-1 text-xs font-semibold bg-black text-white px-3 py-1.5 rounded-lg hover:bg-zinc-800">

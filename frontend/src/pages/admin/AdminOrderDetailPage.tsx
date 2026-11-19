@@ -30,7 +30,6 @@ const ALL_STATUSES: OrderStatus[] = [
   'out_for_delivery',
   'delivered',
   'cancelled',
-  'returned',
 ]
 
 const STATUS_COLORS: Record<string, string> = {
@@ -46,7 +45,6 @@ const STATUS_COLORS: Record<string, string> = {
   out_for_delivery: 'bg-sky-100 text-sky-700',
   delivered: 'bg-green-100 text-green-700',
   cancelled: 'bg-zinc-100 text-zinc-500',
-  returned: 'bg-red-100 text-red-600',
 }
 
 const TIMELINE_STEPS: { status: OrderStatus; label: string }[] = [

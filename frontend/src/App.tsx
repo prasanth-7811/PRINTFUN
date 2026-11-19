@@ -98,7 +98,6 @@ export default function App() {
                 <Route path="coupons" element={<AdminSettingsPage />} />
                 <Route path="reviews" element={<AdminReviewsPage />} />
                 <Route path="shipping" element={<AdminOrdersPage />} />
-                <Route path="returns" element={<AdminOrdersPage />} />
               </Route>
             </Routes>
           </BrowserRouter>

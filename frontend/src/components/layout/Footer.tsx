@@ -53,7 +53,7 @@ export default function Footer() {
           <div>
             <h4 className="text-white font-semibold text-sm mb-4">Help</h4>
             <ul className="space-y-2.5 text-sm">
-              {['Contact', 'FAQ', 'Shipping', 'Returns', 'Refunds', 'Track Order'].map((item) => (
+              {['Contact', 'FAQ', 'Shipping', 'Track Order'].map((item) => (
                 <li key={item}>
                   <Link to={`/${item.toLowerCase().replace(' ', '-')}`} className="hover:text-white transition-colors">{item}</Link>
                 </li>

@@ -24,7 +24,7 @@ const FAQ_ITEMS = [
   { question: 'Can I change my design after ordering?', answer: 'Design changes are not possible after the design has been approved for printing. You can request changes during the design review stage.' },
   { question: 'How long does production take?', answer: 'Production typically takes 3–5 business days after design approval. Delivery takes an additional 2–4 business days depending on your location.' },
   { question: 'Can I track my order?', answer: 'Yes! Once your order is shipped, you will receive a tracking ID and courier details. You can track your order in real-time from your account.' },
-  { question: 'Can I request a return or refund?', answer: 'Returns are accepted within 7 days of delivery for manufacturing defects or incorrect items. Custom-printed items are non-returnable unless defective.' },
+  { question: 'What is your cancellation policy?', answer: 'Because all products at PRINTHEAVEN are custom printed to your specific design, artwork, and sizing, all sales are final once production has commenced.' },
 ]
 
 function ProductCard({ product }: { product: Product }) {

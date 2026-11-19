@@ -174,10 +174,6 @@ export type OrderStatus =
   | 'out_for_delivery'
   | 'delivered'
   | 'cancelled'
-  | 'return_requested'
-  | 'returned'
-  | 'refund_requested'
-  | 'refunded'
 
 export interface OrderItem {
   id: number

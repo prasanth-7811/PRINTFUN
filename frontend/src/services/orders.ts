@@ -27,16 +27,6 @@ export const orderService = {
     return res.data
   },
 
-  async requestReturn(id: number, data: { reason: string; item_id?: number }) {
-    const res = await api.post(`/orders/${id}/return`, data)
-    return res.data
-  },
-
-  async requestRefund(id: number, data: { reason: string; item_id?: number }) {
-    const res = await api.post(`/orders/${id}/refund`, data)
-    return res.data
-  },
-
   async resubmitDesign(id: number, data: { front_design?: string; back_design?: string }) {
     const res = await api.post(`/orders/${id}/resubmit-design`, data)
     return res.data
