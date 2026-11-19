@@ -197,10 +197,7 @@ export default function LoginPage() {
               : 'border-transparent text-zinc-400 hover:text-zinc-600'
           }`}
         >
-          <span>OTP Sign-in</span>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full">
-            Supabase
-          </span>
+          <span>Email OTP</span>
         </button>
       </div>
 
@@ -229,12 +226,12 @@ export default function LoginPage() {
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <FormField
             id="identifier"
-            label="Email or Mobile Number"
-            type="text"
+            label="Email Address"
+            type="email"
             value={identifier}
             onChange={setIdentifier}
-            placeholder="you@example.com or 10-digit mobile"
-            autoComplete="username"
+            placeholder="you@example.com"
+            autoComplete="email"
             required
           />
           <div>
@@ -267,15 +264,15 @@ export default function LoginPage() {
         <div className="space-y-4">
           <FormField
             id="otp-identifier"
-            label="Email or Mobile Number"
-            type="text"
+            label="Email Address"
+            type="email"
             value={identifier}
             onChange={(v) => {
               setIdentifier(v)
               if (otpSent) setOtpSent(false)
             }}
-            placeholder="you@example.com or 10-digit mobile"
-            autoComplete="username"
+            placeholder="you@example.com"
+            autoComplete="email"
             required
           />
 

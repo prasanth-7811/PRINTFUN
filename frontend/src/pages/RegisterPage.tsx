@@ -24,8 +24,7 @@ export default function RegisterPage() {
     if (!form.name.trim() || form.name.trim().length < 2) e.name = 'Enter your full name.'
     if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(form.email))
       e.email = 'Enter a valid email address.'
-    if (!form.phone.trim()) e.phone = 'Enter your mobile number.'
-    else if (!/^[0-9+()\-\s]{7,20}$/.test(form.phone))
+    if (form.phone.trim() && !/^[0-9+()\-\s]{7,20}$/.test(form.phone))
       e.phone = 'Enter a valid mobile number.'
     if (form.password.length < 8) e.password = 'Password must be at least 8 characters.'
     else if (form.password !== form.confirm) e.confirm = 'Passwords do not match.'
@@ -99,7 +98,7 @@ export default function RegisterPage() {
         />
         <FormField
           id="phone"
-          label="Mobile Number"
+          label="Mobile Number (Optional)"
           type="tel"
           value={form.phone}
           onChange={set('phone')}
